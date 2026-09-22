@@ -1,3 +1,5 @@
+import {validateScreenshotEvidence} from './harvest-intake-core.js';
+
 /** Player-authored browser journal. Never represents console saves or automatic telemetry.
  * Shared by browser persistence and a future authenticated account-storage adapter.
  */
@@ -59,8 +61,9 @@ export function validateJournal(input) {
     label(p.name); integer(p.reserve, 0, 999); coordinate(p.x); coordinate(p.z); iso(p.createdAt);
     if (!['pin', 'drinking', 'feeding', 'resting'].includes(p.need) || p.source !== 'player_report') fail('invalid', 'Unsupported place evidence.');
   }
+  const screenshotHashes = new Set();
   for (const r of reports) {
-    only(r, ['id', 'grindId', 'species', 'reserve', 'score', 'medal', 'sex', 'occurredAt', 'recordedAt', 'placeId', 'points', 'notes', 'source']);
+    only(r, ['id', 'grindId', 'species', 'reserve', 'score', 'medal', 'sex', 'occurredAt', 'recordedAt', 'placeId', 'points', 'notes', 'source', 'screenshot']);
     const grind = grinds.find(g => g.id === id(r.grindId));
     if (!grind || grind.reserve !== r.reserve) fail('invalid', 'A report must belong to its selected grind and reserve.');
     label(r.species); integer(r.reserve, 0, 999); iso(r.occurredAt); iso(r.recordedAt);
@@ -68,6 +71,12 @@ export function validateJournal(input) {
     if (!medals.includes(r.medal) || !['unknown', 'male', 'female'].includes(r.sex) || r.source !== 'player_report') fail('invalid', 'Unsupported harvest evidence.');
     if (r.placeId !== null && !places.some(p => p.id === r.placeId && p.reserve === r.reserve)) fail('invalid', 'The selected place is not in this reserve.');
     checkedPoints(r.points); optionalText(r.notes, 500);
+    if (Object.hasOwn(r, 'screenshot')) {
+      const evidence = validateScreenshotEvidence(r.screenshot);
+      if (time(evidence.reviewedAt) > time(r.recordedAt)) fail('invalid', 'Screenshot review cannot follow its saved report.');
+      if (screenshotHashes.has(evidence.imageSha256)) fail('invalid', 'The same screenshot appears in more than one report.');
+      screenshotHashes.add(evidence.imageSha256);
+    }
     if (!grind.periods.some(p => time(r.occurredAt) >= time(p.startedAt) && (p.endedAt === null || time(r.occurredAt) <= time(p.endedAt)))) fail('invalid', 'A reported harvest is outside this grind’s tracking periods.');
   }
   const receipts = array(input.receipts, JOURNAL_LIMITS.commands); distinct(receipts);
@@ -123,13 +132,15 @@ export function applyJournalCommand(input, command, fingerprint, now) {
       g.version++; g.updatedAt = now; break;
     }
     case 'report.add': {
-      only(data, ['reportId', 'grindId', 'version', 'species', 'score', 'medal', 'sex', 'placeId', 'points', 'notes', 'occurredAt']);
+      only(data, ['reportId', 'grindId', 'version', 'species', 'score', 'medal', 'sex', 'placeId', 'points', 'notes', 'occurredAt', 'screenshot']);
       id(data.reportId); const g = getGrind(); iso(data.occurredAt);
       if (time(data.occurredAt) > time(now)) fail('invalid', 'A harvest cannot be reported in the future.');
       if (doc.reports.some(r => r.id === data.reportId)) fail('conflict', 'This report already exists.');
+      const screenshot = Object.hasOwn(data, 'screenshot') ? validateScreenshotEvidence(data.screenshot) : null;
+      if (screenshot && doc.reports.some(r => r.screenshot?.imageSha256 === screenshot.imageSha256)) fail('duplicate_screenshot', 'This exact screenshot is already recorded. No additional harvest was counted.');
       doc.reports.unshift({id: data.reportId, grindId: g.id, species: label(data.species), reserve: g.reserve, score: data.score ?? null,
         medal: data.medal ?? 'unknown', sex: data.sex ?? 'unknown', occurredAt: data.occurredAt, recordedAt: now, placeId: data.placeId ?? null,
-        points: checkedPoints(data.points ?? {}), notes: optionalText(data.notes, 500), source: 'player_report'}); break;
+        points: checkedPoints(data.points ?? {}), notes: optionalText(data.notes, 500), source: 'player_report', ...(screenshot ? {screenshot} : {})}); break;
     }
     case 'place.add': {
       only(data, ['placeId', 'name', 'reserve', 'need', 'x', 'z']); id(data.placeId);

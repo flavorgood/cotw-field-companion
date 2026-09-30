@@ -20,6 +20,10 @@ const file=buffer=>({name:'synthetic-harvest.png',mimeType:'image/png',buffer});
 try{
  if(mode==='local')relay=await createActivatedPhoneRelay({key:randomBytes(32),publicOrigin:'http://127.0.0.1:0/grindzone',allowInsecureLoopback:true});
  const base=relay?.origin||'https://sway-tips.onrender.com/grindzone',url=base+'/play/';proof.url=url;
+ if(mode==='local'){
+  const rootRelay=await createActivatedPhoneRelay({key:randomBytes(32),publicOrigin:'http://127.0.0.1:0',allowInsecureLoopback:true});
+  try{for(const origin of [base,rootRelay.origin])for(const name of ['tesseract.min.js.LICENSE.txt','worker.min.js.LICENSE.txt','LICENSE-tesseract.txt','LICENSE-core.txt','LICENSE-language.txt','manifest.json']){const response=await fetch(origin+'/play/vendor/ocr/'+name);assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),name.endsWith('.txt')?'text/plain; charset=utf-8':'application/json; charset=utf-8');const bytes=Buffer.from(await response.arrayBuffer());assert(bytes.length>0);assert.deepEqual(bytes,readFileSync('public/vendor/ocr/'+name));}for(const origin of [base,rootRelay.origin])assert.equal((await fetch(origin+'/play/vendor/ocr/unreviewed.LICENSE.txt')).status,404);proof.checks.push('Pinned distribution notices, licenses and manifest serve exact nonempty bytes with correct MIME at both supported mounts; unrelated paths stay unavailable.');}finally{await rootRelay.close();}
+ }
  // Public mode must execute the candidate's exact reader bytes, not an older live app.
  for(const name of ['browser-play.js','browser-journal.js','harvest-intake.js','harvest-intake-core.js','harvest-ocr.js']){
   const response=await fetch(url+name);assert.equal(response.status,200);

@@ -21,7 +21,7 @@ test('missing reference fields remain unknown',()=>{
 });
 test('species table and card use identical coverage-aware counts',()=>{
   const r=card({diamonds:1,unclassified:2,unknownGreatOne:1}),data={status:'available',speciesSummaryVersion:1,summary:r.counts,speciesSummary:[{key:r.speciesKey,name:r.species,femaleDiamondCapable:true,counts:r.counts}]};
-  const table=populationSpeciesTable(data),html=herdCards([r]);assert.match(table,/>1 known<\/td>/);assert.match(table,/>Unknown<\/td>/);assert.match(html,/>1 known<\/strong>/);assert.match(html,/Females can reach Diamond/);
+  const table=populationSpeciesTable(data),html=herdCards([r]);assert.match(table,/>1 known<\/button><\/td>/);assert.match(table,/>Unknown<\/(?:button|td)>/);assert.match(html,/>1 known<\/strong>/);assert.match(html,/Females can reach Diamond/);
 });
 test('all herd overview modes use the same label function',()=>{
   const source=readFileSync(new URL('../public/herd-view.js',import.meta.url),'utf8');

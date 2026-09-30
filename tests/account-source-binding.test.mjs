@@ -5,7 +5,7 @@ import test from 'node:test';
 import http from 'node:http';
 import {createAccountSourceHandler} from '../cloud/account-source-http.mjs';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync,mkdirSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync,mkdirSync,lstatSync,realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {randomBytes,createHmac,timingSafeEqual,createHash} from 'node:crypto';
@@ -15,8 +15,9 @@ const random=()=>randomBytes(32).toString('base64url');
 function fixture(t){
  const dir=mkdtempSync(path.join(tmpdir(),'grindzone-account-binding-')),file=path.join(dir,'owners.sqlite'),key=randomBytes(32),accountKey=randomBytes(32),origin='https://phone.example.test',issuer='https://accounts.example.test';
  let tick=1800000000000,reads=0,delayed=null;
- const clock=()=>tick,registry=new AccountSourceRegistry({filename:file,key,now:clock}),codec=phoneTokenCodec({key:randomBytes(32),now:clock}),revoked=new Set(),peers=new Map();
- t.after(()=>{registry.close();rmSync(dir,{recursive:true,force:true});});
+ const clock=()=>tick,registries=[],openRegistry=()=>{const handle=new AccountSourceRegistry({filename:file,key,now:clock});registries.push(handle);return handle;},registry=openRegistry(),codec=phoneTokenCodec({key:randomBytes(32),now:clock}),revoked=new Set(),peers=new Map();
+ // Windows cannot remove SQLite files while any fixture-owned handle remains open.
+ t.after(()=>{for(const handle of registries)handle.close();rmSync(dir,{recursive:true,force:true});});
  function accountToken(subject,extra={}){const data=Buffer.from(JSON.stringify({issuer,subject,sessionId:random(),expiresAt:tick+3600000,emailVerified:true,csrf:random(),displayName:'Test player',...extra})).toString('base64url');return data+'.'+createHmac('sha256',accountKey).update(data).digest('base64url');}
  function verifyAccount(token){if(revoked.has(token)||typeof token!=='string')return null;const [s,signature,...rest]=token.split('.');if(!s||rest.length||!/^[A-Za-z0-9_-]{43}$/.test(signature||''))return null;const expected=createHmac('sha256',accountKey).update(s).digest('base64url');if(!timingSafeEqual(Buffer.from(expected),Buffer.from(signature)))return null;return JSON.parse(Buffer.from(s,'base64url'));}
  function req(token,phoneToken){const a=verifyAccount(token);return {headers:{host:new URL(origin).host,origin,'sec-fetch-site':'same-origin','x-grindzone-account-csrf':a?.csrf,authorization:'Bearer '+token,cookie:phoneToken?'__Secure-grindzone-phone='+phoneToken:''}};}
@@ -31,7 +32,7 @@ function fixture(t){
  // Keep cookie parsing identical to the literal cookie-name length, not an untested magic offset.
  options.resolvePairedPeer=async r=>{const name='__Secure-grindzone-phone=',cookies=r.headers.cookie.split(';').map(s=>s.trim()).filter(s=>s.startsWith(name));if(cookies.length!==1)return null;const c=codec.verify(cookies[0].slice(name.length),'phone');return c?peers.get(c.deviceId):null;};
  const boundary=createAccountSourceBoundary(options),link=async(token=a,device=p)=>{const r=await boundary.requestLink(req(token,device.phoneToken),{requestId:random(),label:'My hunting PC'});await boundary.approveOnPC(device.deviceToken,{requestId:r.requestId,approve:true});return boundary.completeLink(req(token,device.phoneToken),{requestId:r.requestId});};
- return {dir,file,key,registry,codec,origin,issuer,options,boundary,a,b,p,pc,req,link,accountToken,revoked,peers,reads:()=>reads,now:clock,advance:n=>tick+=n,delay:()=>{let resolve;delayed=new Promise(r=>resolve=r);return resolve;}};
+ return {dir,file,key,registry,openRegistry,codec,origin,issuer,options,boundary,a,b,p,pc,req,link,accountToken,revoked,peers,reads:()=>reads,now:clock,advance:n=>tick+=n,delay:()=>{let resolve;delayed=new Promise(r=>resolve=r);return resolve;}};
 }
 const rejectsStatus=(promise,status)=>assert.rejects(promise,e=>e.status===status);
 
@@ -108,17 +109,24 @@ test('device rotation retains approved ownership but invalidates pending request
  await f.boundary.pendingOnPC(next.deviceToken);await rejectsStatus(f.boundary.approveOnPC(next.deviceToken,{requestId:pending.requestId,approve:true}),404);await rejectsStatus(f.boundary.approveOnPC(f.p.deviceToken,{requestId:pending.requestId,approve:true}),409);assert.equal((await f.boundary.sources(f.req(f.a)))[0].sourceId,a.sourceId);
 });
 test('an older device generation remains rejected after registry reopen',async t=>{
- const f=fixture(t);f.registry.observePeer(f.p);const next=f.pc(f.p.installationId,2);f.registry.observePeer(next);f.registry.close();const reopened=new AccountSourceRegistry({filename:f.file,key:f.key,now:f.now});t.after(()=>reopened.close());assert.throws(()=>reopened.observePeer(f.p),e=>e.status===409);
+ const f=fixture(t);f.registry.observePeer(f.p);const next=f.pc(f.p.installationId,2);f.registry.observePeer(next);f.registry.close();const reopened=f.openRegistry();assert.throws(()=>reopened.observePeer(f.p),e=>e.status===409);
 });
 test('source ownership survives two independent SQLite handles and process-style reopen',async t=>{
- const f=fixture(t),r=await f.link(),principal=await f.boundary.principal(f.req(f.a),r.sourceId),second=new AccountSourceRegistry({filename:f.file,key:f.key,now:f.now});t.after(()=>second.close());assert.equal(second.sources(principal.userId)[0].sourceId,r.sourceId);
+ const f=fixture(t),r=await f.link(),principal=await f.boundary.principal(f.req(f.a),r.sourceId),second=f.openRegistry();assert.equal(second.sources(principal.userId)[0].sourceId,r.sourceId);
  second.unlink(principal.userId,{sourceId:r.sourceId,expectedVersion:r.version});await rejectsStatus(f.boundary.read(f.req(f.a),r.sourceId),404);
 });
-test('wrong key, unrelated DB and symlink targets are refused without overwriting existing bytes',async t=>{
+test('wrong key and unrelated DB are refused without overwriting existing bytes',async t=>{
  const f=fixture(t);await f.link();f.registry.close();const digest=()=>createHash('sha256').update(readFileSync(f.file)).digest('hex'),before=digest();
  assert.throws(()=>new AccountSourceRegistry({filename:f.file,key:randomBytes(32)}),/key mismatch/);assert.equal(digest(),before);
- const link=path.join(f.dir,'alias.sqlite');symlinkSync(f.file,link);assert.throws(()=>new AccountSourceRegistry({filename:link,key:f.key}),/symbolic link/);
  const foreign=path.join(f.dir,'foreign.sqlite');writeFileSync(foreign,'unrelated file');assert.throws(()=>new AccountSourceRegistry({filename:foreign,key:f.key}));assert.equal(readFileSync(foreign,'utf8'),'unrelated file');
+});
+test('file-symlink registry targets are refused without overwriting existing bytes',t=>{
+ const f=fixture(t);f.registry.close();const before=readFileSync(f.file),link=path.join(f.dir,'alias.sqlite');
+ try{symlinkSync(f.file,link,'file');}
+ catch(error){if(process.platform==='win32'&&['EPERM','ENOSYS'].includes(error.code)){t.skip('Windows file-symlink creation unavailable ('+error.code+'); native file-link rejection proof remains pending.');return;}throw error;}
+ assert.equal(lstatSync(link).isSymbolicLink(),true);
+ assert.throws(()=>new AccountSourceRegistry({filename:link,key:f.key}),/symbolic link/);
+ assert.deepEqual(readFileSync(f.file),before);
 });
 test('registry never persists raw account subjects, device tokens, session tokens or installation IDs',async t=>{
  const f=fixture(t);const req=f.req(f.a,f.p.phoneToken);req.headers.email='must-not-save@example.test';await f.link();f.registry.close();const bytes=readFileSync(f.file);
@@ -191,8 +199,9 @@ test('HTTP sessions cannot read after provider revocation; offline source has no
  f.revoked.add(f.a);assert.equal((await send('')).status,401);
 });
 
-test('registry rejects a symbolic-link parent without creating data at its target',t=>{
- const f=fixture(t),target=path.join(f.dir,'real'),link=path.join(f.dir,'alias');mkdirSync(target);symlinkSync(target,link,'dir');
+test('registry rejects a symbolic-link or junction parent without creating data at its target',t=>{
+ const f=fixture(t),target=path.join(f.dir,'real'),link=path.join(f.dir,'alias');mkdirSync(target);symlinkSync(target,link,process.platform==='win32'?'junction':'dir');
+ assert.equal(lstatSync(link).isSymbolicLink(),true);assert.equal(realpathSync(link),realpathSync(target));
  assert.throws(()=>new AccountSourceRegistry({filename:path.join(link,'owners.sqlite'),key:f.key}),/symbolic link/);
  assert.throws(()=>readFileSync(path.join(target,'owners.sqlite')),e=>e.code==='ENOENT');
 });

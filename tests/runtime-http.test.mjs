@@ -22,7 +22,8 @@ test('real bootstrap and repeated launcher reuse match code and journal without 
   const rejected=await fetch(app.url+'/api/bootstrap',{headers:{Origin:'https://unrelated.invalid'}});assert.equal(rejected.status,403);
   const snapshot=async()=>Object.fromEntries(await Promise.all((await readdir(dataDir)).filter(v=>/^journal\.sqlite(?:-wal|-shm)?$/.test(v)).map(async name=>[name,(await readFile(path.join(dataDir,name))).toString('hex')])));
   const before=await snapshot();assert(Object.keys(before).includes('journal.sqlite'));
-  const env={PATH:process.env.PATH||'',HOME:directory,LOCALAPPDATA:directory,COMPANION_DATA_DIR:dataDir,COTW_SAVE_DIR:'',COMPANION_PORT:String(app.server.address().port),...(process.env.SYSTEMROOT?{SYSTEMROOT:process.env.SYSTEMROOT}:{})};
+  // Windows os.homedir() reads USERPROFILE; isolate launcher discovery as well as its journal.
+  const env={PATH:process.env.PATH||'',HOME:directory,USERPROFILE:directory,LOCALAPPDATA:directory,COMPANION_DATA_DIR:dataDir,COTW_SAVE_DIR:'',COMPANION_PORT:String(app.server.address().port),...(process.env.SYSTEMROOT?{SYSTEMROOT:process.env.SYSTEMROOT}:{})};
   for(let i=0;i<2;i++){
     const result=await run(process.execPath,[path.join(root,'launcher.mjs')],{env,timeout:10000});
     assert.match(result.stdout,/GrindZone build [a-f0-9]{12} is already running/);assert.equal(result.stderr,'');

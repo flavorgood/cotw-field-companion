@@ -8,8 +8,8 @@ export const browserPlayAssets=Object.freeze([
  'harvest-intake.js','harvest-intake-core.js','harvest-intake.css','harvest-ocr.js',
  'map.js','map-geometry.js','terrain-layer.js','route-stops.js','species-style.js','data-client.js','icon.svg'
 ]);
-export const ocrVendorAssets=Object.freeze(['tesseract.min.js','worker.min.js','lang/eng.traineddata.gz',...['','-simd','-lstm','-simd-lstm','-relaxedsimd','-relaxedsimd-lstm'].flatMap(kind=>['core/tesseract-core'+kind+'.wasm.js','core/tesseract-core'+kind+'.wasm'])]);
-const types={'.wasm':'application/wasm','.gz':'application/gzip','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json; charset=utf-8'};
+export const ocrVendorAssets=Object.freeze(['tesseract.min.js','worker.min.js','tesseract.min.js.LICENSE.txt','worker.min.js.LICENSE.txt','LICENSE-tesseract.txt','LICENSE-core.txt','LICENSE-language.txt','manifest.json','lang/eng.traineddata.gz',...['','-simd','-lstm','-simd-lstm','-relaxedsimd','-relaxedsimd-lstm'].flatMap(kind=>['core/tesseract-core'+kind+'.wasm.js','core/tesseract-core'+kind+'.wasm'])]);
+const types={'.txt':'text/plain; charset=utf-8','.wasm':'application/wasm','.gz':'application/gzip','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json; charset=utf-8'};
 const headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mathartbang.com; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"};
 export function createBrowserPlayHandler({publicOrigin,readAsset=name=>readFileSync(path.join(root,name))}={}){
  const base=new URL(publicOrigin),origin=base.origin,mount=base.pathname==='/'?'':base.pathname.replace(/\/$/,'');

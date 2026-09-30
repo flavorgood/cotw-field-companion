@@ -10,7 +10,7 @@ const hostRoot=path.resolve(process.argv[2]||'.'),mode=process.argv[3]||'local',
 assert(['local','live'].includes(mode));
 const require=createRequire(path.join(hostRoot,'package.json')),{chromium}=require('playwright'),sharp=require('sharp');
 const proof={source:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),at:new Date().toISOString(),mode,passed:false,checks:[],viewports:[],realOcrEngineVerified:false,automaticConsoleCaptureVerified:false,physicalXboxCaptureVerified:false,accountSyncVerified:false,pcProcessesCreated:0,accountsCreated:0,fixture:'Generated English harvest-screen images, actual application, image decoder, Tesseract.js, WebAssembly and IndexedDB; not a real console screenshot'};
-let relay,browser;const errors=[],writes=[],external=[],privateCalls=[];
+let relay,browser;const errors=[],writes=[],external=[],privateCalls=[],localBlobRequests=[];
 const until=async(fn,label)=>{for(let i=0;i<120;i++){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw Error('Timed out: '+label);};
 async function readJournal(page){return page.evaluate(async()=>{const {createBrowserJournalStorage}=await import('./browser-journal-storage.js');const storage=createBrowserJournalStorage();try{return await storage.read();}finally{await storage.close();}});}
 const lines=['HARVEST CHECK','WHITETAIL DEER','TROPHY RATING','271.25','GENDER','FEMALE','DIAMOND'];
@@ -27,7 +27,7 @@ try{
  }
  browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,acceptDownloads:true});
- const watch=page=>{page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(!['GET','HEAD'].includes(r.method()))writes.push(r.method()+' '+new URL(r.url()).pathname);if(!r.url().startsWith(url))external.push(r.url());if(/\/api\/|\/phone\//.test(r.url()))privateCalls.push(r.url());});};
+ const watch=page=>{page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(!['GET','HEAD'].includes(r.method()))writes.push(r.method()+' '+new URL(r.url()).pathname);const localBlob=r.url().startsWith('blob:')&&new URL(r.url()).origin===new URL(url).origin;if(localBlob)localBlobRequests.push(r.url());else if(!r.url().startsWith(url))external.push(r.url());if(/\/api\/|\/phone\//.test(r.url()))privateCalls.push(r.url());});};
  const page=await context.newPage();watch(page);await page.goto(url,{waitUntil:'domcontentloaded'});
  await page.locator('#local-consent').check();await page.locator('[data-act=create]').click();await page.locator('[data-act=start]').click();
  await page.locator('#edit-form [name=name]').fill('Screenshot acceptance grind');await page.locator('#edit-form [name=species]').fill('Whitetail Deer');await page.locator('#edit-form [name=reserve]').selectOption('19');await page.locator('#edit-save').click();await page.locator('#editor').waitFor({state:'hidden'});
@@ -57,7 +57,10 @@ try{
  const second=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const other=await second.newPage();watch(other);await other.goto(url,{waitUntil:'domcontentloaded'});await other.locator('#local-consent').waitFor();assert.equal(await readJournal(other),null);await other.locator('.intro summary').click();await other.locator('#backup-file').setInputFiles({name:'private-synthetic-backup.json',mimeType:'application/json',buffer:bytes});await other.locator('#editor').waitFor();await other.locator('#edit-save').click();await other.locator('#editor').waitFor({state:'hidden'});assert.deepEqual(await readJournal(other),doc);
  await other.locator('[data-act=screenshot]').click();await other.locator('.harvest-intake [name=image]').setInputFiles(file(image));await until(()=>other.locator('.harvest-intake [data-status]').innerText().then(t=>t.includes('already recorded')),'restored duplicate rejection');assert.equal((await readJournal(other)).reports.length,2);
  proof.checks.push('Explicit backup file transfer to a fresh independent browser preserves screenshot evidence and duplicate protection. It is not account-based phone recovery.');
- assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);assert.deepEqual(external,[]);assert.deepEqual(privateCalls,[]);assert.equal((await fetch(base+'/api/state')).status,401);proof.browserUploads=0;proof.privatePcApiRequests=0;
+ const oldReader=await import('data:text/javascript;base64,'+Buffer.from(execFileSync('git',['show','f79302b6d01def0dfcb3469e51637ccc6ccf6bb7:public/browser-journal.js'],{encoding:'utf8'})).toString('base64'));
+ const beforeLegacyRead=await readJournal(other);assert.throws(()=>oldReader.importJournal(bytes.toString()),/Unsupported journal fields/);assert.deepEqual(await readJournal(other),beforeLegacyRead);
+ const {importJournal}=await import('../public/browser-journal.js');assert.deepEqual(importJournal(bytes.toString()),doc);proof.checks.push('Exact f793 reader rejects screenshot-bearing backup without mutating IndexedDB; the compatible candidate reader recovers the full backup. Rollback requires a compatible reader.');
+ assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);assert.deepEqual(external,[]);assert.deepEqual(privateCalls,[]);assert.equal((await fetch(base+'/api/state')).status,401);proof.browserUploads=0;proof.privatePcApiRequests=0;proof.localBlobRequests=localBlobRequests.length;
  proof.checks.push('No page errors, screenshot uploads, external browser requests or private PC API calls; the original protected API remains unauthorized.');proof.passed=true;
 }catch(e){proof.error=String(e.stack||e);process.exitCode=1;}
 finally{await browser?.close();await relay?.close();proof.finishedAt=new Date().toISOString();mkdirSync(output,{recursive:true});writeFileSync(path.join(output,mode+'-harvest-intake.json'),JSON.stringify(proof,null,2));console.log('GRINDZONE_HARVEST_INTAKE '+JSON.stringify(proof));}

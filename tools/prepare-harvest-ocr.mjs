@@ -30,7 +30,7 @@ async function pinnedGitFile(name,size,sha){
 try{
  const wrapper=pack('tesseract.js','7.0.0'),core=pack('tesseract.js-core','7.0.0');
  write('tesseract.min.js',wrapper.read('package/dist/tesseract.min.js'));write('worker.min.js',wrapper.read('package/dist/worker.min.js'));
- write('LICENSE-tesseract.txt',wrapper.read('package/LICENSE'));write('LICENSE-core.txt',core.read('package/LICENSE'));
+ write('LICENSE-tesseract.txt',wrapper.read('package/LICENSE.md'));write('LICENSE-core.txt',core.read('package/LICENSE'));
  for(const kind of ['','-simd','-lstm','-simd-lstm','-relaxedsimd','-relaxedsimd-lstm']){
   const name='tesseract-core'+kind+'.wasm.js';write('core/'+name,core.read('package/'+name));
   const binary='tesseract-core'+kind+'.wasm';if(core.names.includes('package/'+binary))write('core/'+binary,core.read('package/'+binary));

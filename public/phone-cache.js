@@ -9,6 +9,7 @@ const plain=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const validReserve=v=>Number.isInteger(v)&&v>=0&&v<=999;
 const validScope=v=>typeof v==='string'&&/^[A-Za-z0-9_-]{43}$/.test(v);
 const fail=(message,status=0,cacheDenied=false)=>Object.assign(Error(message),{status,cacheDenied});
+const checkSignal=signal=>{if(signal?.aborted)throw signal.reason;};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stamp=v=>Number.isFinite(v)?new Date(v).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'unavailable';
 const newEpoch=()=>globalThis.crypto.randomUUID();
@@ -70,44 +71,51 @@ export class PhoneSnapshotCache{
    this.store=store;this.fetch=fetchImpl;this.now=now;this.authority=null;this.readOnly=false;this.cachedAt=null;this.expiresAt=null;this.enabled=false;this.records=[];this.storageError='';this.latest=null;this.fullRefresh=null;this.fullRefreshAttempt=new Map();this.spoilersRevokedAt=0;this.spoilersDenied=false;
  }
   async request(url,token,{signal}={}){
+   checkSignal(signal);
    const response=await this.fetch(url,{cache:'no-store',headers:token?{'X-Companion-Token':token}:{},...(signal?{signal}:{})});
-  let data;try{data=await response.json();}catch{throw fail('The phone service returned an unreadable response.',response.status);}
+   checkSignal(signal);
+  let data;try{data=await response.json();}catch{checkSignal(signal);throw fail('The phone service returned an unreadable response.',response.status);}
+  checkSignal(signal);
   if(!response.ok)throw Object.assign(fail(data?.error||'Request failed',response.status,[401,403].includes(response.status)),{cacheScope:response.headers.get('x-grindzone-cache-scope')});
   return {response,data};
  }
- async bind(bootstrap){
+ async bind(bootstrap,{signal}={}){
+  checkSignal(signal);
   const authority=cacheAuthority(bootstrap,this.now());
    if(this.authority?.scope!==authority?.scope){this.latest=null;this.readOnly=false;this.cachedAt=null;this.fullRefreshAttempt.clear();this.spoilersRevokedAt=0;this.spoilersDenied=false;}
   this.authority=authority;
   if(!authority){this.enabled=false;return;}
   try{
-   let root=await this.store.read();
-   if(root&&root.scope!==authority.scope){await this.store.edit(current=>current?.scope!==authority.scope?{root:null,result:null}:{root:current,result:null});root=null;}
+   let root=await this.store.read();checkSignal(signal);
+   if(root&&root.scope!==authority.scope){await this.store.edit(current=>{checkSignal(signal);return current?.scope!==authority.scope?{root:null,result:null}:{root:current,result:null};});root=null;}
+   checkSignal(signal);
    this.enabled=root?.enabled===true&&root.scope===authority.scope;
    this.records=this.enabled?(root.records||[]).filter(r=>storedView(r,authority,r.reserve,this.now())).map(r=>({reserve:r.reserve,capturedAt:r.capturedAt,expiresAt:r.expiresAt})):[];
-  }catch(error){this.enabled=false;this.storageError=error.message;}
+  }catch(error){checkSignal(signal);this.enabled=false;this.storageError=error.message;}
  }
  async forget(){
   this.latest=null;this.readOnly=false;this.cachedAt=null;this.expiresAt=null;this.enabled=false;this.records=[];
   await this.store.edit(root=>({root:{schema:CACHE_SCHEMA,scope:this.authority?.scope||root?.scope||null,enabled:false,epoch:newEpoch(),records:[]},result:null}));
  }
  async invalidate(){this.authority=null;await this.forget().catch(()=>{});}
- async authenticate(token){
-  try{const {response,data}=await this.request('/api/bootstrap',token);const metadata={...data,phone:{...data.phone,cache:{scope:response.headers.get('x-grindzone-cache-scope'),expiresAt:Number(response.headers.get('x-grindzone-cache-expires'))}}};await this.bind(metadata);return data;}
+ async authenticate(token,{signal}={}){
+  try{const {response,data}=await this.request('/api/bootstrap',token,{signal});const metadata={...data,phone:{...data.phone,cache:{scope:response.headers.get('x-grindzone-cache-scope'),expiresAt:Number(response.headers.get('x-grindzone-cache-expires'))}}};await this.bind(metadata,{signal});checkSignal(signal);return data;}
   catch(error){if([401,403].includes(error.status)){await this.invalidate();error.cacheDenied=true;}throw error;}
  }
-  async get(url,{token}={}){
-   if(/\/api\/bootstrap(?:\?|$)/.test(url))return this.authenticate(token);
-   if(!/\/api\/state(?:\?|$)/.test(url))return (await this.request(url,token)).data;
-   const bootstrap=await this.authenticate(token),authority=this.authority,startedAt=this.now();
+  async get(url,{token,signal}={}){
+   if(/\/api\/bootstrap(?:\?|$)/.test(url))return this.authenticate(token,{signal});
+   if(!/\/api\/state(?:\?|$)/.test(url))return (await this.request(url,token,{signal})).data;
+   const bootstrap=await this.authenticate(token,{signal}),authority=this.authority,startedAt=this.now();
    const requestUrl=new URL(url,'https://grindzone.invalid'),scoped=requestUrl.searchParams.has('huntSpecies');
    const reserve=Number(requestUrl.searchParams.get('reserve')??bootstrap.selectedReserve??19);
    if(!validReserve(reserve))throw fail('Invalid reserve',400);
    let root=null;
    if(authority)try{root=await this.store.read();}catch(error){this.storageError=error.message;}
+   checkSignal(signal);
    const observedEpoch=root?.scope===authority?.scope?root.epoch:null;
   let result;
-  try{result=await this.request(url,token);}catch(error){
+  try{result=await this.request(url,token,{signal});}catch(error){
+   checkSignal(signal);
    if([401,403].includes(error.status)){await this.invalidate();error.cacheDenied=true;throw error;}
    if(![503,504].includes(error.status)||!authority)throw error;
    if(error.cacheScope!==authority.scope){await this.invalidate();throw fail('The paired source changed. Reload before continuing.',409,true);}
@@ -122,19 +130,22 @@ export class PhoneSnapshotCache{
    const spoilers=data.settings?.spoilers===true;
    if(!spoilers){this.spoilersRevokedAt=Math.max(this.spoilersRevokedAt,startedAt);this.spoilersDenied=true;}
    let mode=null;
-   if(authority)try{mode=await this.reconcileSpoilerMode(authority,observedEpoch,spoilers);if(mode){this.storageError='';if(!spoilers||startedAt>this.spoilersRevokedAt)this.spoilersDenied=false;}}catch(error){this.storageError=spoilers?error.message:'Private copy revocation could not be saved. Saved views remain unavailable until storage recovers.';}
+   if(authority)try{mode=await this.reconcileSpoilerMode(authority,observedEpoch,spoilers,{signal});if(mode){this.storageError='';if(!spoilers||startedAt>this.spoilersRevokedAt)this.spoilersDenied=false;}}catch(error){checkSignal(signal);this.storageError=spoilers?error.message:'Private copy revocation could not be saved. Saved views remain unavailable until storage recovers.';}
+   checkSignal(signal);
    this.latest=!scoped&&mode&&!this.spoilersDenied?{state:data,authority,startedAt,guardEpoch:mode.epoch}:null;
    if(authority&&mode?.permit){
     if(scoped){
      const previous=root?.records?.find(r=>r.reserve===reserve);
      if(mode.changed)this.fullRefreshAttempt.delete(authority.scope+':'+reserve);
      if(mode.changed||!previous||startedAt-previous.capturedAt>=CACHE_HUNT_REFRESH_MS)this.refreshCompleteCopy(requestUrl,token,reserve,authority,mode.permit,startedAt,spoilers);
-    }else try{await this.save(data,reserve,authority,mode.permit,startedAt);}catch(error){this.storageError=error.message;}
+    }else try{await this.save(data,reserve,authority,mode.permit,startedAt,{signal});}catch(error){checkSignal(signal);this.storageError=error.message;}
    }
+   checkSignal(signal);
    return data;
   }
-  async reconcileSpoilerMode(authority,observedEpoch,spoilers){
+  async reconcileSpoilerMode(authority,observedEpoch,spoilers,{signal}={}){
    const outcome=await this.store.edit(root=>{
+    checkSignal(signal);
     if(this.authority?.scope!==authority.scope||root&&root.scope!==authority.scope)return {root:undefined,result:null};
     if(spoilers){
      if((root?.epoch??null)!==observedEpoch)return {root:undefined,result:null};
@@ -166,10 +177,11 @@ export class PhoneSnapshotCache{
    this.fullRefresh=task;
    void task.finally(()=>{if(this.fullRefresh===task)this.fullRefresh=null;});
   }
-  async save(state,reserve,authority,permit,startedAt){
+  async save(state,reserve,authority,permit,startedAt,{signal}={}){
   const data=snapshotState(state,reserve),now=this.now(),expiresAt=Math.min(now+CACHE_RETENTION_MS,authority.expiresAt);
   const record={schema:CACHE_SCHEMA,scope:authority.scope,reserve,capturedAt:now,startedAt,expiresAt,state:data};
   const saved=await this.store.edit(root=>{
+    checkSignal(signal);
     if(!root?.enabled||root.scope!==permit.scope||root.epoch!==permit.epoch||this.authority?.scope!==authority.scope||root.spoilerMode!==undefined&&root.spoilerMode!==(data.settings?.spoilers===true)||data.settings?.spoilers===true&&startedAt<this.spoilersRevokedAt)return {root:undefined,result:false};
     let records=(root.records||[]).filter(r=>r.expiresAt>now);
    // Turning spoilers off removes hidden information from ALL saved reserves, not just the open map.

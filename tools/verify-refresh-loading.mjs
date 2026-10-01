@@ -5,29 +5,33 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {bindPhoneCacheClient} from '../cloud/phone-cache-client.mjs';
+import {mountClientSource} from '../cloud/mount.mjs';
 const root=path.resolve(process.argv[2]||'.'),mode=process.argv[3]||'candidate',out=path.resolve(process.argv[4]||'evidence/refresh-loading/'+mode);
+assert.ok(['baseline','candidate','hosted'].includes(mode));
+const hosted=mode==='hosted',mount=hosted?'/grindzone':'';
 fs.mkdirSync(out,{recursive:true});
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(path.resolve(process.env.PLAYWRIGHT_MODULE)).href:'playwright');
 const state={app:{name:'GrindZone',startedAt:'synthetic-loading'},selectedReserve:19,reserves:[{id:19,name:'Synthetic reserve',bounds:[[0,0],[16000,16000]]},{id:20,name:'Other synthetic reserve',bounds:[[0,0],[16000,16000]]}],settings:{spoilers:false,terrain:false},career:{summary:{diamonds:123,greatOnes:4}},changes:[],careerChanges:[],population:[],zones:[],zoneLedgerVersion:1,zoneHistory:[],zoneTracking:{},zoneActivity:{},encounters:[],harvests:[],pins:[],equipment:[],route:[],sessions:[],observer:{connected:true,sources:[],intervalMs:5000}};
 let holdState=false,bootstrapError=false,holdBootstrap=false,held=[],requests=[];
 const server=http.createServer((req,res)=>{
- const url=new URL(req.url,'http://localhost');requests.push({method:req.method,path:url.pathname,query:url.search});
- const json=(status,body)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
+ const url=new URL(req.url,'http://localhost');if(hosted)url.pathname=url.pathname.replace(/^\/grindzone(?=\/)/,'');requests.push({method:req.method,path:url.pathname,query:url.search});
+ const json=(status,body)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store',...(hosted?{'X-GrindZone-Cache-Scope':'a'.repeat(43),'X-GrindZone-Cache-Expires':String(Date.now()+86400000)}:{})});res.end(JSON.stringify(body));};
  if(url.pathname==='/api/bootstrap'){
   if(bootstrapError)return json(503,{error:'Synthetic startup outage'});
   if(holdBootstrap){res.writeHead(200,{'Content-Type':'application/json'});res.write('{');held.push(res);return;}
-  return json(200,{token:'synthetic',selectedReserve:19,phone:{remote:false}});
+  return json(200,{token:'synthetic',selectedReserve:19,phone:{remote:hosted}});
  }
  if(url.pathname==='/api/state'){
   if(holdState){res.writeHead(200,{'Content-Type':'application/json'});res.write('{');held.push(res);return;}
-  return json(200,{...state,selectedReserve:Number(url.searchParams.get('reserve')||19)});
+  return json(200,{...state,...(hosted?{phone:{mode:'live_relay'}}:{}),selectedReserve:Number(url.searchParams.get('reserve')||19)});
  }
  const rel=url.pathname==='/'?'index.html':url.pathname.slice(1);
  if(rel.includes('..'))return json(404,{});
- try{const body=fs.readFileSync(path.join(root,'public',rel));res.writeHead(200,{'Content-Type':rel.endsWith('.js')?'text/javascript':rel.endsWith('.css')?'text/css':rel.endsWith('.html')?'text/html':'application/octet-stream'});res.end(body);}catch{return json(404,{error:'Synthetic catalog unavailable'});}
+ try{let body=fs.readFileSync(path.join(root,'public',rel));if(hosted&&rel==='app.js')body=mountClientSource(bindPhoneCacheClient(body.toString()),mount);else if(hosted&&(rel.endsWith('.html')||rel.endsWith('.js')))body=mountClientSource(body.toString(),mount);res.writeHead(200,{'Content-Type':rel.endsWith('.js')?'text/javascript':rel.endsWith('.css')?'text/css':rel.endsWith('.html')?'text/html':'application/octet-stream'});res.end(body);}catch{return json(404,{error:'Synthetic catalog unavailable'});}
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-const base='http://127.0.0.1:'+server.address().port,checks=[],errors=[];
+const base='http://127.0.0.1:'+server.address().port+mount,checks=[],errors=[];
 let browser;
 const release=()=>{for(const response of held)response.destroy();held=[];};
 try{
@@ -90,7 +94,8 @@ try{
   const bootBefore=requests.filter(r=>r.path==='/api/bootstrap').length;
   await startup.evaluate(()=>{const retry=document.querySelector('[data-action="bootstrap-retry"]');retry.click();retry.click();});
   await startup.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Save tracking on');
-  assert.equal(requests.filter(r=>r.path==='/api/bootstrap').length,bootBefore+1);
+  // Hosted state reads independently verify the pairing after startup bootstrap.
+  assert.equal(requests.filter(r=>r.path==='/api/bootstrap').length,bootBefore+(hosted?2:1));
   checks.push('Startup retry obtains a fresh session and renders the app without a page reload');
   await startup.close();
   const timeoutPage=await browser.newPage();timeoutPage.on('pageerror',e=>errors.push(e.message));
@@ -110,7 +115,8 @@ try{
  assert.deepEqual(errors,[]);
  assert.ok(requests.every(r=>r.method==='GET'),'verification sends no save commands');
  checks.push('No unexpected command or other write requests');
- const result={passed:true,mode,sourceFiles:{'public/app.js':createHash('sha256').update(fs.readFileSync(path.join(root,'public/app.js'))).digest('hex')},checks,errors,requests,scope:'Actual public/app.js and dependencies; synthetic loopback HTTP only; no installed UI or owner data'};
+ const sourceNames=['public/app.js',...(hosted?['cloud/phone-cache-client.mjs','public/phone-cache.js']:[])];
+ const result={passed:true,mode,sourceFiles:Object.fromEntries(sourceNames.map(name=>[name,createHash('sha256').update(fs.readFileSync(path.join(root,name))).digest('hex')])),checks,errors,requests,scope:'Actual public/app.js and dependencies'+(hosted?' through exact hosted cache binding and /grindzone mount':'')+'; synthetic loopback HTTP only; no installed UI or owner data'};
  fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify({...result,requests:requests.length}));
 }catch(e){fs.writeFileSync(path.join(out,'result.json'),JSON.stringify({passed:false,mode,error:String(e.stack),checks,errors,requests},null,2));throw e;}
 finally{release();await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

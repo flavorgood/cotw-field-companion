@@ -183,7 +183,19 @@ function harvestReadingPosition(){if(view!=='harvests'||scrollY<100)return null;
 function restoreHarvestReadingPosition(anchor){if(!anchor)return;const entry=document.querySelector(`.harvest-entry[data-harvest-id="${CSS.escape(anchor.id)}"]`);if(entry)window.scrollBy(0,entry.getBoundingClientRect().top-anchor.top);}
 function insights(){return intro('Optional information beyond your sightings','Population insights','These views reveal save-derived information about animals you may not have discovered. Disabled by default.')+
  (!state.settings.spoilers?`<section class="panel">${empty('Population spoilers are off','Your field map and recovery journal work without hidden trophy information. Enabling this reveals matched undiscovered zone areas, aggregate populations and experimental Great One candidates.',button('Review spoiler settings','spoilers','','subtle'))}</section>`:
- `<div class="callout warning"><strong>Spoilers enabled.</strong> ${esc(state.candidateNotice)}</div>${herdWorkspaceView(state,{reserve,overview:true})}<h2 style="margin-top:25px">Population change observations</h2><p class="small muted">Appearance ≠ confirmed respawn. Disappearance ≠ confirmed kill. Record fingerprints are not proven permanent animal identities.</p><section class="panel">${(state.changes||[]).slice(0,25).map(c=>`<div class="feature-row"><div><div class="small">${c.boundary?esc(c.boundary.replaceAll('_',' ')):c.changes.map(d=>`${d.appeared} appeared / ${d.disappeared} disappeared · species hash ${esc(d.speciesHash)}`).join('<br>')}</div><div class="tiny muted">${date(c.at)}</div></div></div>`).join('')||'<p class="muted">No changes observed yet.</p>'}</section>`);}
+ `<div class="callout warning"><strong>Spoilers enabled.</strong> <span data-insights-candidate-notice>${esc(state.candidateNotice)}</span></div>${herdWorkspaceView(state,{reserve,overview:true})}<h2 style="margin-top:25px">Population change observations</h2><p class="small muted">Appearance ≠ confirmed respawn. Disappearance ≠ confirmed kill. Record fingerprints are not proven permanent animal identities.</p><section class="panel" data-insights-changes>${insightsChanges()}</section>`);}
+function insightsChanges(){return (state.changes||[]).slice(0,25).map(c=>`<div class="feature-row"><div><div class="small">${c.boundary?esc(c.boundary.replaceAll('_',' ')):c.changes.map(d=>`${d.appeared} appeared / ${d.disappeared} disappeared · species hash ${esc(d.speciesHash)}`).join('<br>')}</div><div class="tiny muted">${date(c.at)}</div></div></div>`).join('')||'<p class="muted">No changes observed yet.</p>';}
+// Herd requests have their own refresh cycle. Keep that workspace attached when
+// only the surrounding state changes, so polling cannot abort it or reset pages.
+function refreshInsights(){
+ const herd=$('#content gz-herds[data-overview="true"]'),notice=$('[data-insights-candidate-notice]'),changes=$('[data-insights-changes]');
+ if(!herd||!notice||!changes||!state.settings.spoilers||typeof herd.updateCareer!=='function')return false;
+ const context={reserve:String(reserve),source:String(state.app?.startedAt||'current'),terrain:String(state.settings?.terrain===true),spoilers:String(state.settings?.spoilers===true),offline:String(state.phone?.mode==='cached_snapshot')};
+ if(Object.entries(context).some(([key,value])=>herd.dataset[key]!==value))return false;
+ notice.textContent=state.candidateNotice||'';herd.updateCareer(state.career?.summary);
+ const observations=insightsChanges();if(changes.innerHTML!==observations)changes.innerHTML=observations;
+ return true;
+}
 function settings(){const o=state.observer;return intro('','Settings','Choose how your companion works.',`<a class="button" href="/api/export">Download your data</a>`)+phoneUI.render(isPhone)+
  `<div class="settings-grid"><section class="panel"><h2>Your map</h2><div class="setting"><input type="checkbox" id="terrainSetting" ${state.settings.terrain?'checked':''}><label for="terrainSetting"><strong>Show terrain</strong><p>Add the game’s hills, lakes and roads to your map. Uses an internet connection.</p></label></div><p class="small muted">Map images come from DECA at mathartbang.com. This shares image requests and your IP address, but no saved hunt data.</p></section>
  <section class="panel"><h2>Animal spoilers</h2><div class="setting"><input type="checkbox" id="spoilerSetting" ${state.settings.spoilers?'checked':''}><label for="spoilerSetting"><strong>Reveal undiscovered zones and population details</strong><p>Show assigned feeding, drinking and resting areas even before discovering them in game. Public DECA reference data is requested by reserve; no save or journal is uploaded.</p></label></div><p class="small muted">Experimental weight matches are possible candidates. They do not confirm a Great One.</p></section></div>
@@ -375,7 +387,8 @@ async function refresh(force=false){if(loading){if(force)pendingRefresh=true;ret
  const badge=$('#connection'),errors=state.observer.sources.filter(s=>s.status==='error').length;
  badge.textContent=!state.observer.connected?'Tracking disconnected':state.observer.error||errors?'Tracking needs attention':'Save tracking on';badge.className='pill '+(!state.observer.connected?'':state.observer.error||errors?'warn':'good');updateHuntStatus();
   const nextSignature=stateSignature();
- if(view==='harvests'&&$('#harvestFeed')&&!$('#modal').open){if(force||signature!==nextSignature){signature=nextSignature;updateHarvestFeed(true);}}
+ if(view==='insights'&&!force&&!$('#modal').open&&refreshInsights()){signature=nextSignature;}
+ else if(view==='harvests'&&$('#harvestFeed')&&!$('#modal').open){if(force||signature!==nextSignature){signature=nextSignature;updateHarvestFeed(true);}}
   else if(!$('#modal').open&&(force||recoveredHuntError||(view!=='studio'&&!(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)&&$('#content').contains(document.activeElement))))&&(force||recoveredHuntError||signature!==nextSignature)){signature=nextSignature;render();}
   if(view==='settings'){refreshSettingsChecks();if(!isPhone)void phoneUI.load();}
  }catch(e){

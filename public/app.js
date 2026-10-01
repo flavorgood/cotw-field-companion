@@ -64,6 +64,7 @@ const filters={species:'all',need:'all',strategy:'all',time:'all',search:'',sort
 const grindActivitySelection=new GrindActivitySelection();
 const harvestFilters={query:'',range:'all',limit:50};
 let requestGeneration=0,pendingRefresh=false,workspacePanel='map',pressureEnabled=true,poiEnabled=false,routeEditing=false,routeTab='stops',selectedGrindId=null;
+let activeRefresh=null,starting=false,pollTimer=null;
 let zoneListPage=0,zoneSearchTimer=null;
 let huntSpeciesLoading=false,huntSpeciesError=false;
 let pendingMapAction=null,pendingMapZone=null;
@@ -85,7 +86,18 @@ function applyZoneFilters(){const zones=filteredZones(),routeScope=huntSpeciesLo
 
 function toast(message,error=false){const n=$('#toast');n.textContent=message;n.classList.toggle('error',error);n.hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>{n.hidden=true;},4500);}
 function connectionState(ready){connectionReady=ready;const notice=$('#connectionNotice');if(notice)notice.hidden=ready;const actions=['zone-track','zone-stop','zone-loss','route','route-up','route-down','route-mode','route-start','setup-stop','setup-budget','shot','evidence','another-shot','search','zone-create','zone-edit','pin-create','place-rename','zone-rename','session-start','session-end','session-edit','session-pause','session-resume','harvest-link','spoilers','terrain'];for(const control of document.querySelectorAll('#submitDialog,#terrainSetting,#spoilerSetting,'+actions.map(action=>`[data-action="${action}"]`).join(','))){if(!ready&&!control.disabled){control.disabled=true;control.dataset.offlineDisabled='true';}else if(ready&&control.dataset.offlineDisabled){control.disabled=false;delete control.dataset.offlineDisabled;}}}
-async function get(url){const r=await fetch(url,{cache:'no-store',headers:token?{'X-Companion-Token':token}:{}});const data=await r.json();if(!r.ok){const error=Error(data.error||'Request failed');error.status=r.status;throw error;}return data;}
+// Keep the deadline active through JSON consumption: headers can arrive while the
+// response body stalls. Only reads are bounded or canceled; saves use postJSON.
+async function get(url,{signal}={}){
+ const controller=new AbortController(),abort=()=>controller.abort(signal.reason);
+ if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
+ const timer=setTimeout(()=>controller.abort(Error('Connection timed out. Try again.')),15000);
+ try{
+  const r=await fetch(url,{cache:'no-store',headers:token?{'X-Companion-Token':token}:{},signal:controller.signal});
+  const data=await r.json();if(!r.ok){const error=Error(data.error||'Request failed');error.status=r.status;throw error;}return data;
+ }catch(error){if(controller.signal.aborted)throw controller.signal.reason;throw error;}
+ finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+}
 const postJSON=createSessionPost({getToken:()=>token,setToken:value=>{token=value;}});
 const command=createCommandClient({makeId:requestId,send:async body=>{if(!connectionReady)throw Object.assign(Error('Reconnect to your PC before saving.'),{status:503});return postJSON('/api/command',body);}});
 function openDialog(title,body,handler,submit='Save'){$('#dialogTitle').textContent=title;$('#dialogBody').innerHTML=body;$('#formError').textContent='';$('#submitDialog').textContent=submit;dialogHandler=handler;highlightAnimalPickers();$('#modal').showModal();}
@@ -329,6 +341,7 @@ async function act(action,target){
  if(action==='route-choose'){switchView('map');clearZoneSelection();setWorkspacePanel('zones',true);return;}
  if(action==='species-focus'){$('#filterSpecies')?.focus();$('#filterSpecies')?.scrollIntoView({block:'center'});return;}
  if(action==='state-retry'){requestGeneration++;huntSpeciesError=false;huntSpeciesLoading=view==='map'&&filters.species!=='all';if(view==='map'&&map?.data)applyZoneFilters();return refresh(true);}
+ if(action==='bootstrap-retry')return start();
  if(action==='view-map'){setWorkspacePanel('map');return switchView('map');}
  if(action.startsWith('view-'))return switchView(action.slice(5));
  if(action==='shot')return shotDialog();
@@ -380,9 +393,9 @@ document.addEventListener('click',e=>{const b=e.target.closest('nav [data-view]'
 $('#reserve').onchange=()=>{setMapExpanded(false);clearTimeout(zoneSearchTimer);reserve=Number($('#reserve').value);requestGeneration++;clearZoneSelection();restoreFilters();workspacePanel='map';const u=new URL(location.href);u.searchParams.set('reserve',reserve);if(/^https?:$/.test(location.protocol))history.replaceState(null,'',u);$('#content').innerHTML='';refresh(true);};
 $('#rescan').onclick=async()=>{try{$('#rescan').disabled=true;await command({op:'observer.scan'});await refresh(true);toast('Save check complete.');}catch(e){toast(e.message,true);}finally{$('#rescan').disabled=false;}};
 window.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='n'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)&&!$('#modal').open&&state){e.preventDefault();shotDialog();}});
-async function refresh(force=false){if(loading){if(force)pendingRefresh=true;return;}loading=true;const ticket=requestGeneration,requestedReserve=reserve,requestedView=view,requestedSpecies=filters.species;try{
+async function refresh(force=false){if(loading){if(force){pendingRefresh=true;if(activeRefresh&&(activeRefresh.ticket!==requestGeneration||activeRefresh.reserve!==reserve||activeRefresh.view!==view||(view==='map'&&activeRefresh.species!==filters.species)))activeRefresh.controller.abort();}return;}loading=true;const ticket=requestGeneration,requestedReserve=reserve,requestedView=view,requestedSpecies=filters.species,controller=new AbortController();activeRefresh={controller,ticket,reserve:requestedReserve,view:requestedView,species:requestedSpecies};try{
  const huntScope=requestedView==='map'?`&huntSpecies=${encodeURIComponent(requestedSpecies)}`:'';
- const next=await get(`/api/state?reserve=${requestedReserve}${huntScope}`);if(ticket!==requestGeneration||requestedReserve!==reserve||requestedView!==view||(requestedView==='map'&&requestedSpecies!==filters.species)){pendingRefresh=true;return;}const recoveredHuntError=huntSpeciesError;huntSpeciesLoading=false;huntSpeciesError=false;state=next;connectionState(true);refreshPressureLayer();
+ const next=await get(`/api/state?reserve=${requestedReserve}${huntScope}`,{signal:controller.signal});if(ticket!==requestGeneration||requestedReserve!==reserve||requestedView!==view||(requestedView==='map'&&requestedSpecies!==filters.species)){pendingRefresh=true;return;}const recoveredHuntError=huntSpeciesError;huntSpeciesLoading=false;huntSpeciesError=false;state=next;connectionState(true);refreshPressureLayer();
  const picker=$('#reserve');if(!picker.options.length)picker.innerHTML=state.reserves.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('');picker.value=String(reserve);
  const badge=$('#connection'),errors=state.observer.sources.filter(s=>s.status==='error').length;
  badge.textContent=!state.observer.connected?'Tracking disconnected':state.observer.error||errors?'Tracking needs attention':'Save tracking on';badge.className='pill '+(!state.observer.connected?'':state.observer.error||errors?'warn':'good');updateHuntStatus();
@@ -392,7 +405,7 @@ async function refresh(force=false){if(loading){if(force)pendingRefresh=true;ret
   else if(!$('#modal').open&&(force||recoveredHuntError||(view!=='studio'&&!(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)&&$('#content').contains(document.activeElement))))&&(force||recoveredHuntError||signature!==nextSignature)){signature=nextSignature;render();}
   if(view==='settings'){refreshSettingsChecks();if(!isPhone)void phoneUI.load();}
  }catch(e){
-  if(ticket!==requestGeneration||requestedReserve!==reserve||requestedView!==view){pendingRefresh=true;return;}
+  if(ticket!==requestGeneration||requestedReserve!==reserve||requestedView!==view||(requestedView==='map'&&requestedSpecies!==filters.species)){pendingRefresh=true;return;}
   huntSpeciesLoading=false;
   const hadCachedState=!!state,cachedReserveMatches=state?.selectedReserve===requestedReserve;
   if(state&&!cachedReserveMatches){clearZoneSelection();state=null;map?.destroy();map=null;}
@@ -407,8 +420,9 @@ async function refresh(force=false){if(loading){if(force)pendingRefresh=true;ret
   else if(state&&$('#huntNotice'))$('#huntNotice').innerHTML='<div class="callout warning"><strong>Tracking PC unavailable.</strong> Showing your last loaded data. Reconnecting automatically…</div>';
   else if(!state)$('#content').innerHTML=`<section class="panel"><h1>Companion unavailable</h1><p>${esc(e.message)}</p><p class="muted">Make sure the companion is running on your PC, then try again.</p>${button('Try again','state-retry','','small')}</section>`;
   signature='';
- }finally{loading=false;if(pendingRefresh){pendingRefresh=false;queueMicrotask(()=>refresh(true));}}}
-try{const boot=await get('/api/bootstrap');token=boot.token;isPhone=boot.phone?.remote===true;reserve=boot.selectedReserve;const valid=['overview','map','recovery','herds','harvests','insights','settings','reference','career','studio','home','reserves','gear','rares','faq','maps','feedback','grinds'];const queryReserve=Number(new URL(location.href).searchParams.get('reserve'));if(new URL(location.href).searchParams.has('reserve')&&Number.isInteger(queryReserve)&&queryReserve>=0&&queryReserve<=999)reserve=queryReserve;restoreFilters();view=valid.includes(location.hash.slice(1))?location.hash.slice(1):'home';if(view==='overview')view='home';await refresh(true);setInterval(()=>refresh(),5000);}catch(e){$('#content').innerHTML=`<section class="panel"><h1>Connect to your companion</h1><p>${esc(e.message)}</p></section>`;}
+ }finally{activeRefresh=null;loading=false;if(pendingRefresh){pendingRefresh=false;queueMicrotask(()=>refresh(true));}}}
+async function start(){if(starting)return;starting=true;const retry=$('[data-action="bootstrap-retry"]');if(retry)retry.disabled=true;try{const boot=await get('/api/bootstrap');token=boot.token;isPhone=boot.phone?.remote===true;reserve=boot.selectedReserve;const valid=['overview','map','recovery','herds','harvests','insights','settings','reference','career','studio','home','reserves','gear','rares','faq','maps','feedback','grinds'];const queryReserve=Number(new URL(location.href).searchParams.get('reserve'));if(new URL(location.href).searchParams.has('reserve')&&Number.isInteger(queryReserve)&&queryReserve>=0&&queryReserve<=999)reserve=queryReserve;restoreFilters();view=valid.includes(location.hash.slice(1))?location.hash.slice(1):'home';if(view==='overview')view='home';await refresh(true);if(pollTimer===null)pollTimer=setInterval(()=>refresh(),5000);}catch(e){$('#content').innerHTML=`<section class="panel"><h1>Connect to your companion</h1><p>${esc(e.message)}</p>${button('Try again','bootstrap-retry','','small')}</section>`;}finally{starting=false;}}
+await start();
 
 $('#content').addEventListener('click',e=>{const b=e.target.closest('[data-career-reserve]');if(b){reserve=Number(b.dataset.careerReserve);requestGeneration++;refresh(true).then(()=>switchView('map'));}});
 

@@ -186,3 +186,42 @@ test('failed spoiler revocation denies offline rich fallback until storage recov
  blocked=false;await assert.rejects(f.cache.get('/api/state?reserve=19&huntSpecies=all'),/no saved copy/);
  assert.equal(f.cache.spoilersDenied,false);assert.equal(f.store.root.spoilerMode,false);assert.deepEqual(f.store.root.records,[]);
 });
+
+test('a pre-canceled cache read sends no authorization request and preserves private copies',async()=>{
+ const f=fixture();await f.keep();const before=structuredClone(f.store.root),calls=f.calls.length,controller=new AbortController(),reason=Error('Obsolete view');controller.abort(reason);
+ await assert.rejects(f.cache.get('/api/state?reserve=19',{signal:controller.signal}),error=>error===reason);
+ assert.equal(f.calls.length,calls);assert.deepEqual(f.store.root,before);assert.equal(f.cache.readOnly,false);
+});
+
+test('canceling a fresh bootstrap body preserves its reason and cannot bind another source',async()=>{
+ const f=fixture();await f.keep();const before=structuredClone(f.store.root),controller=new AbortController(),reason=Error('Bootstrap deadline');let arrived;
+ const seen=new Promise(resolve=>arrived=resolve);
+ f.cache.fetch=async (_url,{signal})=>{assert.equal(signal,controller.signal);return new Response(new ReadableStream({start(stream){signal.addEventListener('abort',()=>stream.error(signal.reason),{once:true});arrived();}}),{headers:{'x-grindzone-cache-scope':B}});};
+ const pending=f.cache.get('/api/state?reserve=19',{signal:controller.signal});await seen;controller.abort(reason);
+ await assert.rejects(pending,error=>error===reason);assert.deepEqual(f.store.root,before);assert.equal(f.cache.authority.scope,A);assert.equal(f.cache.readOnly,false);
+});
+
+test('canceling an authenticated 503 body never falls back to a saved view or captures it',async()=>{
+ const f=fixture();await f.keep();const before=structuredClone(f.store.root),original=f.cache.fetch,controller=new AbortController(),reason=Object.assign(Error('Obsolete scoped read'),{status:503,cacheScope:A});let arrived;
+ const seen=new Promise(resolve=>arrived=resolve);
+ f.cache.fetch=async (url,options)=>{assert.equal(options.signal,controller.signal);if(url.endsWith('/api/bootstrap'))return original(url);return new Response(new ReadableStream({start(stream){options.signal.addEventListener('abort',()=>stream.error(options.signal.reason),{once:true});arrived();}}),{status:503,headers:{'x-grindzone-cache-scope':A}});};
+ const pending=f.cache.get('/api/state?reserve=19',{signal:controller.signal});await seen;controller.abort(reason);
+ await assert.rejects(pending,error=>error===reason);assert.deepEqual(f.store.root,before);assert.equal(f.cache.readOnly,false);assert.equal(f.cache.cachedAt,null);
+});
+
+test('a transport that finishes an obsolete body despite cancellation cannot overwrite the cache',async()=>{
+ const f=fixture();await f.keep();const before=structuredClone(f.store.root),original=f.cache.fetch,controller=new AbortController(),reason=Error('View changed');let arrived,release;
+ const seen=new Promise(resolve=>arrived=resolve),hold=new Promise(resolve=>release=resolve);
+ f.cache.fetch=async (url,options)=>{if(url.endsWith('/api/bootstrap'))return original(url);assert.equal(options.signal,controller.signal);return {ok:true,status:200,headers:new Headers({'x-grindzone-cache-scope':A}),async json(){arrived();await hold;return {...state(),harvests:[{id:'obsolete-receipt'}]};}};};
+ const pending=f.cache.get('/api/state?reserve=19',{signal:controller.signal});await seen;controller.abort(reason);release();
+ await assert.rejects(pending,error=>error===reason);assert.deepEqual(f.store.root,before);assert.equal(f.cache.readOnly,false);
+});
+
+test('canceling before a delayed storage transaction commits blocks obsolete snapshot capture',async()=>{
+ const f=fixture();await f.keep();const before=structuredClone(f.store.root),edit=f.store.edit.bind(f.store),controller=new AbortController(),reason=Error('Storage write became obsolete');let arrived,release,calls=0;
+ const seen=new Promise(resolve=>arrived=resolve),hold=new Promise(resolve=>release=resolve);
+ f.setView({...state(),harvests:[{id:'obsolete-receipt'}]});
+ f.store.edit=async change=>{if(++calls===2){arrived();await hold;}return edit(change);};
+ const pending=f.cache.get('/api/state?reserve=19',{signal:controller.signal});await seen;controller.abort(reason);release();
+ await assert.rejects(pending,error=>error===reason);assert.deepEqual(f.store.root,before);
+});

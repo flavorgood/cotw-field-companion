@@ -9,8 +9,20 @@ export function bindPhoneCacheClient(input){
   source=parts[0]+after+parts[1];
  };
  if(typeof source!=='string'||source.includes('new PhoneSnapshotCache('))throw Error('Invalid or already bound phone client');
+ // Git checkouts may use CRLF; canonical hook contents and uniqueness stay exact.
+ source=source.replace(/\r\n/g,'\n');
  source="import {PhoneSnapshotCache} from './phone-cache.js';\nconst phoneCache=new PhoneSnapshotCache();\n"+source;
- replace("async function get(url){const r=await fetch(url,{cache:'no-store',headers:token?{'X-Companion-Token':token}:{}});const data=await r.json();if(!r.ok){const error=Error(data.error||'Request failed');error.status=r.status;throw error;}return data;}","async function get(url){return phoneCache.get(url,{token});}");
+ const readAnchor=`async function get(url,{signal}={}){
+ const controller=new AbortController(),abort=()=>controller.abort(signal.reason);
+ if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
+ const timer=setTimeout(()=>controller.abort(Error('Connection timed out. Try again.')),15000);
+ try{
+  const r=await fetch(url,{cache:'no-store',headers:token?{'X-Companion-Token':token}:{},signal:controller.signal});
+  const data=await r.json();if(!r.ok){const error=Error(data.error||'Request failed');error.status=r.status;throw error;}return data;
+ }catch(error){if(controller.signal.aborted)throw controller.signal.reason;throw error;}
+ finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+}`;
+ replace(readAnchor,readAnchor.replace("const r=await fetch(url,{cache:'no-store',headers:token?{'X-Companion-Token':token}:{},signal:controller.signal});\n  const data=await r.json();if(!r.ok){const error=Error(data.error||'Request failed');error.status=r.status;throw error;}return data;","return await phoneCache.get(url,{token,signal:controller.signal});"));
  replace("function warning(){const failed=", "function warning(){if(phoneCache.readOnly)return phoneCache.warning();const failed=");
  replace("if(notice)notice.hidden=ready;", "if(notice){notice.hidden=ready;notice.textContent=phoneCache.notice();}");
  replace("querySelectorAll('#submitDialog,#terrainSetting,#spoilerSetting,'", "querySelectorAll('#rescan,#submitDialog,#terrainSetting,#spoilerSetting,'");

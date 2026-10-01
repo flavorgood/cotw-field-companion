@@ -153,10 +153,23 @@ export function applyJournalCommand(input, command, fingerprint, now) {
   doc.revision++; doc.updatedAt = now; doc.receipts.push({id: command.id, fingerprint, revision: doc.revision});
   return {journal: validateJournal(doc), replay: false};
 }
+// Compare authored species conservatively without rewriting labels or merging aliases.
+export function isTargetSpecies(species, targetSpecies) {
+  return species.trim().toLowerCase() === targetSpecies.trim().toLowerCase();
+}
 export function grindSummary(doc, grindId) {
   const grind = doc.grinds.find(g => g.id === grindId); if (!grind) return null;
-  const reports = doc.reports.filter(r => r.grindId === grindId), target = reports.filter(r => r.species === grind.targetSpecies);
-  return {total: reports.length, target: target.length, other: reports.length - target.length, diamonds: target.filter(r => r.medal === 'diamond').length, greatOnes: target.filter(r => r.medal === 'great_one').length,
+  const reports = doc.reports.filter(r => r.grindId === grindId);
+  const medalCounts = Object.fromEntries(['target', 'other', 'all'].map(scope => [scope, Object.fromEntries(medals.map(medal => [medal, 0]))]));
+  let target = 0;
+  for (const report of reports) {
+    const matches = isTargetSpecies(report.species, grind.targetSpecies);
+    if (matches) target++;
+    medalCounts[matches ? 'target' : 'other'][report.medal]++;
+    medalCounts.all[report.medal]++;
+  }
+  return {total: reports.length, target, other: reports.length - target,
+    diamonds: medalCounts.target.diamond, greatOnes: medalCounts.target.great_one, medalCounts,
     recent: [...reports].sort((a, b) => time(b.occurredAt) - time(a.occurredAt) || a.id.localeCompare(b.id)), source: 'player_report'};
 }
 export function exportJournal(input) {

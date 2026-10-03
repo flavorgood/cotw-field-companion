@@ -5,7 +5,7 @@ import path from 'node:path';
 const root=fileURLToPath(new URL('../',import.meta.url));
 export const browserPlayAssets=Object.freeze([
  'browser-play.js','browser-play.css','browser-journal.js','browser-journal-storage.js',
- 'harvest-intake.js','harvest-intake-core.js','harvest-intake.css','harvest-ocr.js',
+ 'capture-source.js','capture-source.css','harvest-intake.js','harvest-intake-core.js','harvest-intake.css','harvest-ocr.js',
  'map.js','map-geometry.js','terrain-layer.js','route-stops.js','species-style.js','data-client.js','icon.svg'
 ]);
 export const ocrVendorAssets=Object.freeze(['tesseract.min.js','worker.min.js','tesseract.min.js.LICENSE.txt','worker.min.js.LICENSE.txt','LICENSE-tesseract.txt','LICENSE-core.txt','LICENSE-language.txt','manifest.json','lang/eng.traineddata.gz',...['','-simd','-lstm','-simd-lstm','-relaxedsimd','-relaxedsimd-lstm'].flatMap(kind=>['core/tesseract-core'+kind+'.wasm.js','core/tesseract-core'+kind+'.wasm'])]);

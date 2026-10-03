@@ -66,6 +66,7 @@ internal sealed class GrindZoneWindow : Form
     private readonly Label startup = new() { Dock = DockStyle.Fill, Text = "Starting GrindZone…", TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(18, 28, 21), ForeColor = Color.White };
     private bool prepared;
     private bool opened;
+    private CaptureFolderPicker? capturePicker;
 
     internal GrindZoneWindow(Uri localUrl, string profile, string fingerprint, string readyToken)
     {
@@ -83,6 +84,16 @@ internal sealed class GrindZoneWindow : Form
         startup.BringToFront();
         Shown += async (_, _) => await OpenAsync();
         _ = Task.Run(ReadOwnerCommands);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            capturePicker?.Dispose();
+            capturePicker = null;
+        }
+        base.Dispose(disposing);
     }
 
     private void ReadOwnerCommands()
@@ -112,6 +123,9 @@ internal sealed class GrindZoneWindow : Form
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: profile);
             if (IsDisposed) return;
             await view.EnsureCoreWebView2Async(environment);
+            if (IsDisposed) return;
+            capturePicker = new CaptureFolderPicker(view.CoreWebView2, environment, this, localUrl, () => opened);
+            await capturePicker.InitializeAsync();
             if (IsDisposed) return;
             view.CoreWebView2.NavigationStarting += (_, e) =>
             {

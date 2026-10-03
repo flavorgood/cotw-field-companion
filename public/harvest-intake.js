@@ -1,5 +1,6 @@
 import {makeScreenshotEvidence} from './harvest-intake-core.js';
 import {prepareScreenshot, recognizeScreenshot} from './harvest-ocr.js';
+import {mountCaptureSource} from './capture-source.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const medals = {unknown:'Not read / unknown',none:'No medal',bronze:'Bronze',silver:'Silver',gold:'Gold',diamond:'Diamond',great_one:'Great One'};
 const options = (values, selected) => Object.entries(values).map(([value,label]) => `<option value="${esc(value)}" ${value === selected ? 'selected' : ''}>${esc(label)}</option>`).join('');
@@ -7,13 +8,14 @@ const localTime = value => { const d = new Date(value); return new Date(d.getTim
 
 /** Uses the same transactional journal as manual reports; no upload, account or PC API. */
 export function createHarvestIntake({storage, getContext, onSaved, prepare = prepareScreenshot, recognize = recognizeScreenshot}) {
-  let dialog, context, candidate, extraction, imageUrl, controller, sequence = 0, saving = false, reading = false, pending = null, method = 'manual_review';
+  let dialog, context, candidate, extraction, imageUrl, controller, captureSource, sequence = 0, saving = false, reading = false, pending = null, method = 'manual_review';
   const find = selector => dialog?.querySelector(selector);
   const status = text => { const node = find('[data-status]'); if (node) node.textContent = text; };
   function disableSave() { const button = find('[data-save]'); if (button) button.disabled = !candidate || reading || saving; }
   function close() {
     if (saving) return false;
     ++sequence; controller?.abort(); controller = null;
+    captureSource?.dispose();captureSource=null;
     if (imageUrl) URL.revokeObjectURL(imageUrl); imageUrl = null;
     dialog?.close(); dialog?.remove(); dialog = null; candidate = null; pending = null; return true;
   }
@@ -36,6 +38,8 @@ export function createHarvestIntake({storage, getContext, onSaved, prepare = pre
     dialog = document.createElement('dialog'); dialog.className = 'harvest-intake'; dialog.setAttribute('aria-labelledby','intake-title');
     dialog.innerHTML = `<form><header><h2 id="intake-title">Import a harvest screenshot</h2><button type="button" data-cancel aria-label="Close screenshot import">Close</button></header><p><strong>${esc(context.grind.name)}</strong> · ${esc(context.reserveName)} · ${esc(context.journal.platform)}</p><p>Choose a PNG or JPEG saved from your console or PC. English text is read on this device. Review and confirm before a harvest is counted.</p><label class="intake-file">Choose screenshot<input type="file" name="image" accept="image/png,image/jpeg,.png,.jpg,.jpeg"></label><p class="intake-help">No image upload or Xbox account link. The original image is not stored in the journal. Keep it in your photos. An unsaved review is lost when this page closes.</p><img data-preview alt="Selected harvest screenshot" hidden><p data-status role="status" aria-live="polite"></p><button type="button" data-stop hidden>Stop reading; review manually</button><button type="button" data-retry hidden>Retry text reading</button><button type="button" data-refresh hidden>Refresh progress and keep this review</button><fieldset data-review disabled>${fields()}</fieldset><datalist id="intake-species">${context.speciesNames.map(name=>`<option value="${esc(name)}"></option>`).join('')}</datalist><footer><button type="submit" data-save disabled>Add reviewed harvest</button></footer></form>`;
     document.body.append(dialog); dialog.showModal();
+    const captureHost=document.createElement('div');find('.intake-file').before(captureHost);
+    captureSource=mountCaptureSource(captureHost,{onSelect:file=>{if(saving)throw Error('A reviewed harvest is being saved.');return select(file);},extensions:['.png','.jpg','.jpeg'],maxBytes:12*1024*1024});
     dialog.addEventListener('cancel',event=>{event.preventDefault();if(!saving)close();});
     find('[data-cancel]').addEventListener('click',close);
     find('[data-stop]').addEventListener('click',()=>controller?.abort());

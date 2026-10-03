@@ -61,7 +61,10 @@ test('the real PC HTTP server serves the complete dashboard module graph and opt
     for(const match of source.matchAll(/\b(?:from\s*|import\s*\(\s*)['"](\.\.?\/[^'"?#]+\.js)['"]/g))queue.push(new URL(match[1],app.url+pathname).pathname);
   }
   assert(seen.has('/save-data.js'),'The actual dashboard must import the save-data renderer');
-  const css=await fetch(app.url+'/save-data.css');assert.equal(css.status,200);assert.match(css.headers.get('content-type'),/text\/css/);
+  assert(seen.has('/capture-source.js'),'The actual dashboard must import its capture source');
+  for(const pathname of ['/save-data.css','/capture-source.css']){
+    const css=await fetch(app.url+pathname);assert.equal(css.status,200,'Missing PC stylesheet: '+pathname);assert.match(css.headers.get('content-type'),/text\/css/);
+  }
   const state=await (await fetch(app.url+'/api/state?reserve=19')).json();assert.equal(state.career.saveData.profile.level,42);
   assert.equal((await fetch(app.url+'/lib/save-data.mjs')).status,404,'No private library source should become an HTTP asset');
   assert.equal((await fetch(app.url+'/tests/save-data-workflow-fixture.mjs')).status,404);

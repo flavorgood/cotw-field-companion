@@ -17,7 +17,7 @@ namespace GrindZone.Desktop
         private readonly CoreWebView2 core;
         private readonly CoreWebView2Environment environment;
         private readonly Form owner;
-        private readonly string root;
+        private readonly string origin, rootPath;
         private readonly Func<bool> opened;
         private bool busy, disposed;
         private long navigationGeneration;
@@ -26,7 +26,7 @@ namespace GrindZone.Desktop
         internal CaptureFolderPicker(CoreWebView2 core, CoreWebView2Environment environment, Form owner, Uri localRoot, Func<bool> opened)
         {
             this.core = core; this.environment = environment; this.owner = owner;
-            root = localRoot.AbsoluteUri; this.opened = opened;
+            origin = localRoot.GetLeftPart(UriPartial.Authority); rootPath = localRoot.AbsolutePath; this.opened = opened;
         }
 
         internal async Task InitializeAsync()
@@ -36,7 +36,8 @@ namespace GrindZone.Desktop
             // localRoot is constrained by the launch contract to http://127.0.0.1:<port>/.
             await core.AddScriptToExecuteOnDocumentCreatedAsync(@"
 (() => {
-  if (window !== top || location.href !== '" + root + @"') return;
+  const page = new URL(location.href);
+  if (window !== top || page.origin !== '" + origin + @"' || page.pathname !== '" + rootPath + @"') return;
   let pending = null;
   chrome.webview.addEventListener('message', event => {
     if (!pending || !['grindzone-capture-folder:selected','grindzone-capture-folder:cancelled','grindzone-capture-folder:error'].includes(event.data)) return;
@@ -60,7 +61,15 @@ namespace GrindZone.Desktop
 
         private bool CanReply()
         {
-            return !disposed && !owner.IsDisposed && !owner.Disposing && opened() && string.Equals(core.Source, root, StringComparison.Ordinal);
+            return !disposed && !owner.IsDisposed && !owner.Disposing && opened() && IsAppRoot(core.Source);
+        }
+
+        private bool IsAppRoot(string source)
+        {
+            Uri address;
+            return Uri.TryCreate(source, UriKind.Absolute, out address) && string.IsNullOrEmpty(address.UserInfo) &&
+                string.Equals(address.GetLeftPart(UriPartial.Authority), origin, StringComparison.Ordinal) &&
+                string.Equals(address.AbsolutePath, rootPath, StringComparison.Ordinal);
         }
 
         private void NavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs navigation)
@@ -77,7 +86,7 @@ namespace GrindZone.Desktop
 
         private async void Receive(object sender, CoreWebView2WebMessageReceivedEventArgs message)
         {
-            if (disposed || busy || !CanReply() || !string.Equals(message.Source, root, StringComparison.Ordinal)) return;
+            if (disposed || busy || !CanReply() || !IsAppRoot(message.Source)) return;
             string request;
             try { request = message.TryGetWebMessageAsString(); } catch (ArgumentException) { return; } catch (InvalidOperationException) { return; }
             if (request != Request) return;
@@ -88,7 +97,7 @@ namespace GrindZone.Desktop
                 // Check the current top document in the host too; raw postMessage cannot skip the gesture check.
                 var active = await core.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
                     "{\"expression\":\"window === top && navigator.userActivation.isActive\",\"userGesture\":false,\"returnByValue\":true}");
-                if (generation != navigationGeneration || !CanReply() || !string.Equals(message.Source, root, StringComparison.Ordinal)) return;
+                if (generation != navigationGeneration || !CanReply() || !IsAppRoot(message.Source)) return;
                 // Accept only the exact successful boolean result; protocol errors fail closed.
                 if (!Regex.IsMatch(active, @"^\s*\{\s*""result""\s*:\s*\{\s*""type""\s*:\s*""boolean""\s*,\s*""value""\s*:\s*true\s*\}\s*\}\s*$"))
                 { Reply(generation, "error"); return; }

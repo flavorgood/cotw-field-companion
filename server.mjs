@@ -48,6 +48,7 @@ export async function createApp({managedGate=null,dataDir,saveDir=null,port=4783
   const runtime=Object.freeze({...identity,scope:runtimeScope(dataDir,saveDir)});
   const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'};
   const assets=new Map(['/updates-ui.js','/herd-view.js','/herd-view.css','/','/index.html','/app.js','/zone-window.js','/dashboard.js','/save-data.js','/save-data.css','/hunt-locations.js','/hunt-locations.css','/grinds.js','/species-style.js','/commands.js','/route-stops.js','/route-setup.js','/setup-catalog.js','/harvest-view.js','/phone-ui.js','/phone.css','/qrcode.js','/map.js','/style.css','/icon.svg','/reference.js','/reference-core.js','/data-client.js','/career.js','/studio.js','/field-library.js','/field-theme.css','/hunting-workspace.css','/map-geometry.js','/terrain-layer.js','/map-atlas.js','/maps.css'].map(url=>[url,readFileSync(path.join(appDir,'public',url==='/'?'index.html':url.slice(1)))]));
+  for(const url of ['/capture-source.js','/capture-source.css'])assets.set(url,readFileSync(path.join(appDir,'public',url.slice(1))));
   // This control is local-PC only; signed-phone HTML and permissions are unchanged.
   for(const url of ['/','/index.html'])assets.set(url,Buffer.from(assets.get(url).toString('utf8').replace('</body>','<script type="module" src="/updates-ui.js"></script></body>')));
   const server=http.createServer(async(req,res)=>{

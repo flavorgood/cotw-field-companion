@@ -2,16 +2,17 @@
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {createAccountRecoveryHandler} from './account-journal-recovery.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));
 export const browserPlayAssets=Object.freeze([
- 'browser-play.js','browser-play.css','browser-journal.js','browser-journal-storage.js',
+ 'browser-play.js','browser-play.css','browser-journal.js','browser-journal-storage.js','account-recovery.js',
  'capture-source.js','capture-source.css','harvest-intake.js','harvest-intake-core.js','harvest-intake.css','harvest-ocr.js',
  'map.js','map-geometry.js','terrain-layer.js','route-stops.js','species-style.js','data-client.js','icon.svg'
 ]);
 export const ocrVendorAssets=Object.freeze(['tesseract.min.js','worker.min.js','tesseract.min.js.LICENSE.txt','worker.min.js.LICENSE.txt','LICENSE-tesseract.txt','LICENSE-core.txt','LICENSE-language.txt','manifest.json','lang/eng.traineddata.gz',...['','-simd','-lstm','-simd-lstm','-relaxedsimd','-relaxedsimd-lstm'].flatMap(kind=>['core/tesseract-core'+kind+'.wasm.js','core/tesseract-core'+kind+'.wasm'])]);
 const types={'.txt':'text/plain; charset=utf-8','.wasm':'application/wasm','.gz':'application/gzip','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json; charset=utf-8'};
 const headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mathartbang.com; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"};
-export function createBrowserPlayHandler({publicOrigin,readAsset=name=>readFileSync(path.join(root,name))}={}){
+export function createBrowserPlayHandler({publicOrigin,readAsset=name=>readFileSync(path.join(root,name)),accountRecovery=null}={}){
  const base=new URL(publicOrigin),origin=base.origin,mount=base.pathname==='/'?'':base.pathname.replace(/\/$/,'');
  if(base.username||base.password||base.search||base.hash||!['','/grindzone'].includes(mount))throw Error('A fixed GrindZone mount is required');
  if(base.protocol!=='https:'&&!(base.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(base.hostname)))throw Error('HTTPS is required');
@@ -19,12 +20,14 @@ export function createBrowserPlayHandler({publicOrigin,readAsset=name=>readFileS
  assets.set(prefix+'/',readAsset('public/browser-play.html'));assets.set(prefix+'/index.html',assets.get(prefix+'/'));
  for(const [name,file]of [['maps','maps-data'],['reference','rating-data'],['gear','gear-data']])assets.set(prefix+'/catalog/'+name+'.json',readAsset('lib/'+file+'.json'));
  function send(res,status,body,type='text/plain; charset=utf-8'){res.writeHead(status,{...headers,'Content-Type':type});res.end(body);}
+ const recover=createAccountRecoveryHandler({recovery:accountRecovery,prefix:prefix+'/recovery',origin,headers});
  return (req,res)=>{
   if(typeof req.url!=='string'||!req.url.startsWith(prefix))return false;
   let url;try{url=new URL(req.url,origin);}catch{send(res,400,'Invalid request');return true;}
   // Do not broaden the matched route into other relay paths or filesystem locations.
   if(url.pathname!==prefix&&!url.pathname.startsWith(prefix+'/'))return false;
   if(req.headers.host!==base.host||req.headers.origin&&req.headers.origin!==origin||req.headers['sec-fetch-site']&&['same-site','cross-site'].includes(req.headers['sec-fetch-site'])){send(res,403,'Open GrindZone directly');return true;}
+  if(recover(req,res))return true;
   if(!['GET','HEAD'].includes(req.method)){send(res,405,'This entry accepts no journal uploads or remote changes.');return true;}
   if(url.pathname===prefix){res.writeHead(302,{...headers,Location:prefix+'/'});res.end();return true;}
   const vendor=ocrVendorAssets.find(name=>url.pathname===prefix+'/vendor/ocr/'+name);

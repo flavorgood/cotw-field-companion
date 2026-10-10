@@ -1,6 +1,7 @@
 import {esc,safePreference,savePreference} from './data-client.js';
 import {speciesName,isGreatOneSpecies,GREAT_ONE_COLOR} from './species-style.js';
 import {mountCaptureSource} from './capture-source.js';
+import {decodeScreenshotBitmap} from './screenshot-decode.js';
 
 const SIZES = {
   square: [1080, 1080],
@@ -63,7 +64,7 @@ export async function openScreenshot(file) {
   let decoded, objectUrl;
   try {
     if (typeof globalThis.createImageBitmap === 'function') {
-      try { decoded = await globalThis.createImageBitmap(blob); } catch { /* Try the browser image decoder below. */ }
+      try { decoded = await decodeScreenshotBitmap(blob); } catch { /* Try the browser image decoder below. */ }
     }
     if (!decoded) {
       decoded = await new Promise((resolve, reject) => {

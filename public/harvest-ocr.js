@@ -1,4 +1,5 @@
 import {inspectScreenshot, extractHarvest} from './harvest-intake-core.js';
+import {decodeScreenshotBitmap} from './screenshot-decode.js';
 let library;
 function loadLibrary() {
   if (!library) library = new Promise((resolve, reject) => {
@@ -16,7 +17,7 @@ export async function prepareScreenshot(file) {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const imageSha256 = [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2,'0')).join('');
   // Decode before offering review. A valid-looking header is not a usable image.
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await decodeScreenshotBitmap(file);
   try {
     if (Math.min(bitmap.width,bitmap.height) !== Math.min(metadata.width,metadata.height) || Math.max(bitmap.width,bitmap.height) !== Math.max(metadata.width,metadata.height)) throw Error('Screenshot dimensions do not match its header.');
   } finally { bitmap.close(); }

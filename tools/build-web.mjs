@@ -4,7 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url))),out=path.join(root,'docs');
-const files=['public.js','feedback.js','species-style.js','data-client.js','reference.js','reference-core.js','field-library.js','career.js','studio.js','capture-source.js','capture-source.css','style.css','field-theme.css','icon.svg','map.js','route-stops.js','map-geometry.js','terrain-layer.js','map-atlas.js','maps.css'];
+const files=['public.js','feedback.js','species-style.js','data-client.js','reference.js','reference-core.js','field-library.js','career.js','studio.js','screenshot-decode.js','capture-source.js','capture-source.css','style.css','field-theme.css','icon.svg','map.js','route-stops.js','map-geometry.js','terrain-layer.js','map-atlas.js','maps.css'];
 const outputs={'index.html':readFileSync(path.join(root,'public/public.html'))};
 const configuredFeedbackEndpoint=process.env.COTW_FEEDBACK_ENDPOINT?.trim()||'';
 let feedbackOrigin='';

@@ -298,7 +298,7 @@ export class ShareStudio {
     this.exportControls();
     const generation = this.imageGeneration, errors = [];
     let added = 0;
-    this.message('Opening screenshots on this device.');
+    this.message('Opening screenshots on this device…');
     try {
       for (const file of selected) {
         if (generation !== this.imageGeneration) break;
@@ -334,10 +334,10 @@ export class ShareStudio {
       ['thumbnail', 'Hunting thumbnail']
     ], design.layout);
     const sizeOptions = selectOptions([
-      ['square', 'Square � 1080 x 1080'],
-      ['portrait', 'Portrait � 1080 x 1350'],
-      ['wide', 'Wide � 1920 x 1080'],
-      ['thumbnail', 'Thumbnail � 1280 x 720']
+      ['square', 'Square · 1080 × 1080'],
+      ['portrait', 'Portrait · 1080 × 1350'],
+      ['wide', 'Wide · 1920 × 1080'],
+      ['thumbnail', 'Thumbnail · 1280 × 720']
     ], design.size);
     const themeOptions = selectOptions([
       ['trail', 'Trail'],
@@ -349,9 +349,9 @@ export class ShareStudio {
       return '<label><input type="checkbox" name="studioMetric" value="' + esc(key) + '" ' + checked(key, design.metrics) + '>' + esc(label.toLowerCase()) + '</label>';
     }).join('');
     const sourceOptions = hasStats
-      ? '<option value="custom"' + (design.source === 'custom' ? ' selected' : '') + '>What I enter</option><option value="saved"' + (design.source === 'saved' ? ' selected' : '') + '>' + (demo ? 'Sample hunter data � fictional' : 'My game saves') + '</option>'
+      ? '<option value="custom"' + (design.source === 'custom' ? ' selected' : '') + '>What I enter</option><option value="saved"' + (design.source === 'saved' ? ' selected' : '') + '>' + (demo ? 'Sample hunter data · fictional' : 'My game saves') + '</option>'
       : '<option value="custom" selected>What I enter</option>';
-    const demoBadge = demo ? '<span class="pill studio-demo-badge">DEMO DATA � FICTIONAL SAMPLE</span>' : '<span class="pill">Photos stay on this device</span>';
+    const demoBadge = demo ? '<span class="pill studio-demo-badge">DEMO DATA · FICTIONAL SAMPLE</span>' : '<span class="pill">Photos stay on this device</span>';
 
     queueMicrotask(() => {
       this.captureSource?.dispose();
@@ -364,7 +364,7 @@ export class ShareStudio {
       '<div class="studio-steps" aria-label="Studio steps"><div><b>1</b><span>Add a screenshot</span></div><div><b>2</b><span>Pick a style</span></div><div><b>3</b><span>Save or share</span></div></div>',
       '<section class="panel studio-controls studio-import" aria-label="Choose your screenshots">',
       '<div data-studio-capture-source></div>',
-      '<div id="studioDropzone" class="studio-dropzone" tabindex="0"><strong>1. Add an in-game screenshot</strong><span>Choose a saved screenshot from Photos or Files. You can also drop or paste one.</span><button id="studioChoosePhotos" type="button" class="button primary studio-photo-button">Choose screenshots</button><input id="studioPhotos" class="studio-file-input" type="file" accept="image/*,.png,.jpg,.jpeg,.webp,.bmp" multiple><small>Up to 6 images � PNG, JPG, WebP or BMP � 32 MB each</small></div>',
+      '<div id="studioDropzone" class="studio-dropzone" tabindex="0"><strong>1. Add an in-game screenshot</strong><span>Choose a saved screenshot from Photos or Files. You can also drop or paste one.</span><button id="studioChoosePhotos" type="button" class="button primary studio-photo-button">Choose screenshots</button><input id="studioPhotos" class="studio-file-input" type="file" accept="image/*,.png,.jpg,.jpeg,.webp,.bmp" multiple><small>Up to 6 images · PNG, JPG, WebP or BMP · 32 MB each</small></div>',
       '<p id="studioImportStatus" role="status" class="muted small">Screenshots are processed locally, not uploaded.</p>',
       '<div id="studioPhotoStrip" class="studio-photo-strip" aria-live="polite"></div>',
       '</section><div class="studio-layout"><section id="studioControls" class="panel studio-controls"><h2>Style your card</h2>',
@@ -374,11 +374,11 @@ export class ShareStudio {
       '<label>Your name <span class="muted">(optional)</span><input data-design="alias" maxlength="50" placeholder="Only shown on your image" value="' + esc(design.alias) + '"></label>',
       '<label>Animal <span class="muted">(optional)</span><input data-design="species" maxlength="70" placeholder="For example, Moose" value="' + esc(design.species) + '"></label>',
       '<p id="studioSpeciesLabel" class="small great-one-hint" ' + (design.species ? '' : 'hidden') + '>' + (design.species ? speciesName(design.species) : '') + '</p>',
-      '<label>Extra details <span class="muted">(optional)</span><input data-design="subtitle" maxlength="140" placeholder="Score, reserve, date." value="' + esc(design.subtitle) + '"></label>',
+      '<label>Extra details <span class="muted">(optional)</span><input data-design="subtitle" maxlength="140" placeholder="Score, reserve, date…" value="' + esc(design.subtitle) + '"></label>',
       '<details class="studio-section"><summary>Stats on your image</summary><label>Use stats from<select data-design="source">' + sourceOptions + '</select></label>',
       '<fieldset class="studio-metrics" ' + (hasStats ? '' : 'hidden') + '><legend>Choose up to 6 stats</legend>' + metricOptions + '</fieldset>',
       '<label>Your own stats <span class="muted">(name: value)</span><textarea data-design="custom" rows="4" maxlength="800" placeholder="Favorite reserve: Askiy Ridge&#10;Best trophy: 9.6">' + esc(design.custom) + '</textarea></label></details>',
-      '<label>Photo fit<select data-design="photoFit"><option value="contain"' + (design.photoFit === 'contain' ? ' selected' : '') + '>Show the whole photo</option><option value="cover"' + (design.photoFit === 'cover' ? ' selected' : '') + '>Crop to fill � adjust each image above</option></select></label>',
+      '<label>Photo fit<select data-design="photoFit"><option value="contain"' + (design.photoFit === 'contain' ? ' selected' : '') + '>Show the whole photo</option><option value="cover"' + (design.photoFit === 'cover' ? ' selected' : '') + '>Crop to fill · adjust each image above</option></select></label>',
       '<p class="small muted">Career, trophy and thumbnail cards use the first image. Choose Photo collage to show several.</p>',
       '<div class="actions"><button id="studioClearPhotos" class="button subtle" type="button">Clear images</button><button id="studioClearDesign" class="button subtle" type="button">Reset design</button></div>',
       '<p class="tiny muted">Images are processed in this browser. They are not uploaded or saved by this companion.</p></section>',
@@ -412,7 +412,7 @@ export class ShareStudio {
     if (!host) return;
     host.innerHTML = this.photos.map((photo, index) => {
       return '<div class="studio-photo"><canvas width="160" height="100" data-photo-preview="' + index + '" aria-label="Photo ' + (index + 1) + '"></canvas><div><button type="button" class="button small" data-photo-left="' + index + '" aria-label="Move photo ' + (index + 1) + ' left"' + (index === 0 ? ' disabled' : '') + '>&larr;</button><button type="button" class="button small" data-photo-remove="' + index + '" aria-label="Remove photo ' + (index + 1) + '">&times;</button></div></div>';
-    }).join('') + (this.design.photoFit === 'cover' ? this.photos.map((photo,index) => '<details class="studio-section"><summary>Adjust crop � image ' + (index + 1) + '</summary><label>Left / right<input type="range" min="0" max="100" value="' + Math.round((photo.studioCrop?.x ?? 0.5)*100) + '" data-photo-focus="x" data-photo-index="' + index + '"></label><label>Top / bottom<input type="range" min="0" max="100" value="' + Math.round((photo.studioCrop?.y ?? 0.5)*100) + '" data-photo-focus="y" data-photo-index="' + index + '"></label></details>').join('') : '');
+    }).join('') + (this.design.photoFit === 'cover' ? this.photos.map((photo,index) => '<details class="studio-section"><summary>Adjust crop · image ' + (index + 1) + '</summary><label>Left / right<input type="range" min="0" max="100" value="' + Math.round((photo.studioCrop?.x ?? 0.5)*100) + '" data-photo-focus="x" data-photo-index="' + index + '"></label><label>Top / bottom<input type="range" min="0" max="100" value="' + Math.round((photo.studioCrop?.y ?? 0.5)*100) + '" data-photo-focus="y" data-photo-index="' + index + '"></label></details>').join('') : '');
     host.querySelectorAll('canvas').forEach((canvas, index) => {
       const context = canvas.getContext('2d');
       context.fillStyle = '#101711';
@@ -559,8 +559,8 @@ export class ShareStudio {
     context.globalAlpha = 1;
     context.fillStyle = ink;
     const source = !this.metrics().length ? 'PLAYER SCREENSHOT' : this.design.source === 'saved'
-      ? (this.state?.demo ? 'DEMO DATA � FICTIONAL SAMPLE' : 'FROM GAME SAVES � ' + (this.state?.career?.savedAt ? new Date(this.state.career.savedAt).toLocaleDateString() : 'last update'))
-      : 'CUSTOM STATS � ENTERED BY PLAYER';
+      ? (this.state?.demo ? 'DEMO DATA · FICTIONAL SAMPLE' : 'FROM GAME SAVES · ' + (this.state?.career?.savedAt ? new Date(this.state.career.savedAt).toLocaleDateString() : 'last update'))
+      : 'CUSTOM STATS · ENTERED BY PLAYER';
     fitted(context, source, pad, height - 47, width * 0.68, width * 0.017, 'normal');
     context.textAlign = 'right';
     fitted(context, 'GRINDZONE', width - pad, height - 47, width * 0.25, width * 0.017);

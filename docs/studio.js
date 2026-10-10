@@ -1,5 +1,7 @@
-import {esc,safePreference,savePreference} from './data-client.js?v=9312d4049b222121';
-import {speciesName,isGreatOneSpecies,GREAT_ONE_COLOR} from './species-style.js?v=9312d4049b222121';
+import {esc,safePreference,savePreference} from './data-client.js?v=267cb98126cd5bca';
+import {speciesName,isGreatOneSpecies,GREAT_ONE_COLOR} from './species-style.js?v=267cb98126cd5bca';
+import {mountCaptureSource} from './capture-source.js?v=267cb98126cd5bca';
+import {decodeScreenshotBitmap} from './screenshot-decode.js?v=267cb98126cd5bca';
 
 const SIZES = {
   square: [1080, 1080],
@@ -62,7 +64,7 @@ export async function openScreenshot(file) {
   let decoded, objectUrl;
   try {
     if (typeof globalThis.createImageBitmap === 'function') {
-      try { decoded = await globalThis.createImageBitmap(blob); } catch { /* Try the browser image decoder below. */ }
+      try { decoded = await decodeScreenshotBitmap(blob); } catch { /* Try the browser image decoder below. */ }
     }
     if (!decoded) {
       decoded = await new Promise((resolve, reject) => {
@@ -351,11 +353,17 @@ export class ShareStudio {
       : '<option value="custom" selected>What I enter</option>';
     const demoBadge = demo ? '<span class="pill studio-demo-badge">DEMO DATA · FICTIONAL SAMPLE</span>' : '<span class="pill">Photos stay on this device</span>';
 
-    queueMicrotask(() => this.draw());
+    queueMicrotask(() => {
+      this.captureSource?.dispose();
+      const captureHost=this.root.querySelector('[data-studio-capture-source]');
+      if(captureHost)this.captureSource=mountCaptureSource(captureHost,{onSelect:file=>this.addPhotos([file])});
+      this.draw();
+    });
     return [
       '<div class="intro studio-intro"><div><div class="eyebrow">SHARE YOUR HUNT</div><h1>Trophy studio</h1><p>Make a card or a hunting thumbnail in three quick steps.</p></div>' + demoBadge + '</div>',
       '<div class="studio-steps" aria-label="Studio steps"><div><b>1</b><span>Add a screenshot</span></div><div><b>2</b><span>Pick a style</span></div><div><b>3</b><span>Save or share</span></div></div>',
       '<section class="panel studio-controls studio-import" aria-label="Choose your screenshots">',
+      '<div data-studio-capture-source></div>',
       '<div id="studioDropzone" class="studio-dropzone" tabindex="0"><strong>1. Add an in-game screenshot</strong><span>Choose a saved screenshot from Photos or Files. You can also drop or paste one.</span><button id="studioChoosePhotos" type="button" class="button primary studio-photo-button">Choose screenshots</button><input id="studioPhotos" class="studio-file-input" type="file" accept="image/*,.png,.jpg,.jpeg,.webp,.bmp" multiple><small>Up to 6 images · PNG, JPG, WebP or BMP · 32 MB each</small></div>',
       '<p id="studioImportStatus" role="status" class="muted small">Screenshots are processed locally, not uploaded.</p>',
       '<div id="studioPhotoStrip" class="studio-photo-strip" aria-live="polite"></div>',

@@ -8,15 +8,33 @@ export function createBrowserJournalStorage({indexedDB = globalThis.indexedDB, d
   let connection = null;
   function open() {
     if (connection) return connection;
-    connection = new Promise((resolve, reject) => {
-      if (!indexedDB) { reject(storageError()); return; }
+    let resolveOpen, rejectOpen, settled = false;
+    const opening = new Promise((resolve, reject) => { resolveOpen = resolve; rejectOpen = reject; });
+    connection = opening;
+    const failed = () => {
+      if (settled) return;
+      settled = true;
+      if (connection === opening) connection = null;
+      rejectOpen(storageError());
+    };
+    try {
+      if (!indexedDB) throw storageError();
       const request = indexedDB.open(dbName, 1);
-      request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('documents')) request.result.createObjectStore('documents'); };
-      request.onblocked = () => { connection = null; reject(storageError()); };
-      request.onerror = () => { connection = null; reject(storageError()); };
-      request.onsuccess = () => { const db = request.result; db.onversionchange = () => { db.close(); connection = null; }; resolve(db); };
-    });
-    return connection;
+      request.onupgradeneeded = () => {
+        if (settled || connection !== opening) { request.transaction?.abort(); return; }
+        if (!request.result.objectStoreNames.contains('documents')) request.result.createObjectStore('documents');
+      };
+      request.onblocked = failed;
+      request.onerror = failed;
+      request.onsuccess = () => {
+        const db = request.result;
+        if (settled || connection !== opening) { db.close(); return; }
+        settled = true;
+        db.onversionchange = () => { db.close(); if (connection === opening) connection = null; };
+        resolveOpen(db);
+      };
+    } catch { failed(); }
+    return opening;
   }
   async function transaction(mode, operation) {
     const db = await open();
@@ -65,6 +83,6 @@ export function createBrowserJournalStorage({indexedDB = globalThis.indexedDB, d
       });
       return changed(output);
     },
-    async close() { const db = await connection?.catch(() => null); db?.close(); connection = null; }
+    async close() { const opening = connection, db = await opening?.catch(() => null); db?.close(); if (connection === opening) connection = null; }
   };
 }

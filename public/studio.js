@@ -1,5 +1,7 @@
 import {esc,safePreference,savePreference} from './data-client.js';
 import {speciesName,isGreatOneSpecies,GREAT_ONE_COLOR} from './species-style.js';
+import {mountCaptureSource} from './capture-source.js';
+import {decodeScreenshotBitmap} from './screenshot-decode.js';
 
 const SIZES = {
   square: [1080, 1080],
@@ -36,6 +38,62 @@ const DEFAULT_DESIGN = {
 };
 const checked = (value, values) => values.includes(value) ? 'checked' : '';
 
+// Validate local image bytes, not the OS-provided MIME label or filename alone.
+// Screenshots never leave the browser; unsupported formats get an actionable error.
+export async function screenshotType(file) {
+  if (!file || typeof file.slice !== 'function' || !Number.isFinite(file.size) || file.size <= 0) throw Error('This file is empty or unreadable.');
+  if (file.size > 32 * 1024 * 1024) throw Error('Choose a screenshot under 32 MB.');
+  const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const begins = values => values.every((v, i) => bytes[i] === v);
+  if (begins([137,80,78,71,13,10,26,10])) return 'image/png';
+  if (begins([255,216,255])) return 'image/jpeg';
+  if (begins([82,73,70,70]) && [87,69,66,80].every((v,i)=>bytes[i+8]===v)) return 'image/webp';
+  if (begins([66,77])) return 'image/bmp';
+  throw Error('Use PNG, JPG, WebP or BMP. For HEIC or HDR/JXR captures, save a PNG or JPG copy first.');
+}
+
+export function screenshotCrop(image, width, height) {
+  const ratio = Math.max(width / image.width, height / image.height);
+  const w = width / ratio, h = height / ratio;
+  const fraction = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.5;
+  return [(image.width - w) * fraction(image.studioCrop?.x), (image.height - h) * fraction(image.studioCrop?.y), w, h];
+}
+
+export async function openScreenshot(file) {
+  const type = await screenshotType(file), blob = file.slice(0, file.size, type);
+  let decoded, objectUrl;
+  try {
+    if (typeof globalThis.createImageBitmap === 'function') {
+      try { decoded = await decodeScreenshotBitmap(blob); } catch { /* Try the browser image decoder below. */ }
+    }
+    if (!decoded) {
+      decoded = await new Promise((resolve, reject) => {
+        const image = new Image();
+        objectUrl = URL.createObjectURL(blob);
+        const timeout = setTimeout(() => { image.src = ''; reject(Error('The image took too long to open.')); }, 15000);
+        image.onload = () => { clearTimeout(timeout); resolve(image); };
+        image.onerror = () => { clearTimeout(timeout); reject(Error('This image could not be decoded. Try another PNG or JPG copy.')); };
+        image.src = objectUrl;
+      });
+    }
+    const width = decoded.naturalWidth || decoded.width, height = decoded.naturalHeight || decoded.height;
+    if (!(width > 0 && height > 0) || width * height > 40000000) throw Error('Use an image up to 40 megapixels.');
+    // Bound retained memory even for six 4K/8K captures; never modify the source file.
+    const scale = Math.min(1, 2560 / Math.max(width, height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale)); canvas.height = Math.max(1, Math.round(height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw Error('This browser could not open the image editor.');
+    context.drawImage(decoded, 0, 0, canvas.width, canvas.height);
+    canvas.studioCrop = {x:0.5,y:0.5};
+    canvas.close = () => { canvas.width = 0; canvas.height = 0; };
+    return canvas;
+  } finally {
+    decoded?.close?.();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  }
+}
+
 function fitted(ctx, text, x, y, width, size, style = 'bold', animal = false) {
   let fontSize = Math.max(12, size);
   ctx.font = style + ' ' + fontSize + 'px Bahnschrift, Arial, sans-serif';
@@ -61,10 +119,7 @@ function cover(ctx, img, x, y, width, height, fit = 'contain') {
     ctx.drawImage(img, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
     return;
   }
-  const ratio = Math.max(width / img.width, height / img.height);
-  const sourceWidth = width / ratio;
-  const sourceHeight = height / ratio;
-  ctx.drawImage(img, (img.width - sourceWidth) / 2, (img.height - sourceHeight) / 2, sourceWidth, sourceHeight, x, y, width, height);
+  ctx.drawImage(img, ...screenshotCrop(img, width, height), x, y, width, height);
 }
 
 function selectOptions(values, current) {
@@ -79,6 +134,9 @@ export class ShareStudio {
     this.error = '';
     this.busy = false;
     this.currentBlob = null;
+    this.imageGeneration = 0;
+    this.drawVersion = 0;
+    this.exporting = false;
     this.design = Object.assign({}, DEFAULT_DESIGN, safePreference('studio-design', {}));
     this.normalize();
 
@@ -91,25 +149,28 @@ export class ShareStudio {
       this.handleDesign(event);
     });
     root.addEventListener('dragover', event => {
-      const zone = event.target.closest('#studioDropzone');
+      const zone = event.target.closest('.studio-layout,.studio-import') && this.root.querySelector('#studioDropzone');
       if (!zone) return;
       event.preventDefault();
       zone.classList.add('dragging');
     });
     root.addEventListener('dragleave', event => {
-      const zone = event.target.closest('#studioDropzone');
+      const zone = event.target.closest('.studio-layout,.studio-import') && this.root.querySelector('#studioDropzone');
       if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove('dragging');
     });
     root.addEventListener('drop', event => {
-      const zone = event.target.closest('#studioDropzone');
+      const zone = event.target.closest('.studio-layout,.studio-import') && this.root.querySelector('#studioDropzone');
       if (!zone) return;
       event.preventDefault();
       zone.classList.remove('dragging');
       this.addPhotos(event.dataTransfer?.files || []);
     });
-    root.addEventListener('paste', event => {
-      const files = [...(event.clipboardData?.files || [])].filter(file => file.type.startsWith('image/'));
-      if (files.length && event.target.closest('#studioControls')) this.addPhotos(files);
+    document.addEventListener('paste', event => {
+      if (!this.root.querySelector('#studioCanvas')) return;
+      // Ordinary text paste in titles/notes must keep working.
+      if (event.target.closest?.('input,textarea,[contenteditable]') && event.clipboardData?.getData('text/plain')) return;
+      const files = [...(event.clipboardData?.files || [])];
+      if (files.length) { event.preventDefault(); void this.addPhotos(files); }
     });
     root.addEventListener('click', event => {
       const remove = event.target.closest('[data-photo-remove]');
@@ -127,9 +188,11 @@ export class ShareStudio {
           this.draw();
         }
       }
+      if (event.target.closest('#studioChoosePhotos')) this.root.querySelector('#studioPhotos')?.click();
       if (event.target.closest('#studioDownload')) this.export(false);
       if (event.target.closest('#studioShare')) this.export(true);
       if (event.target.closest('#studioClearPhotos')) {
+        this.imageGeneration++; // A late decoder must never restore a cleared image.
         this.photos.forEach(photo => photo.close?.());
         this.photos = [];
         this.draw();
@@ -154,6 +217,15 @@ export class ShareStudio {
 
   handleDesign(event) {
     const target = event.target;
+    if (target.dataset.photoFocus) {
+      const photo = this.photos[Number(target.dataset.photoIndex)];
+      const value = Number(target.value) / 100;
+      if (photo && ['x','y'].includes(target.dataset.photoFocus) && Number.isFinite(value)) {
+        photo.studioCrop[target.dataset.photoFocus] = Math.max(0, Math.min(1, value));
+        this.draw(false); // Keep the range control and keyboard focus intact during adjustment.
+      }
+      return;
+    }
     if (!target.closest('#studioControls')) return;
     if (target.name === 'studioMetric') {
       this.design.metrics = [...this.root.querySelectorAll('[name=studioMetric]:checked')].map(input => input.value).slice(0, 6);
@@ -195,42 +267,58 @@ export class ShareStudio {
   }
 
   message(text, error = false) {
-    const element = this.root.querySelector('#studioMessage');
-    if (element) {
+    for (const element of this.root.querySelectorAll('#studioMessage,#studioImportStatus')) {
       element.textContent = text;
       element.className = error ? 'error' : 'muted small';
     }
   }
 
+  exportControls() {
+    for (const button of this.root.querySelectorAll('#studioDownload,#studioShare')) button.disabled = this.busy || this.exporting || !this.currentBlob;
+  }
+
+  prepareExport(canvas, version) {
+    this.exportControls();
+    // Encode before a Share click so native sharing keeps its user activation.
+    canvas.toBlob(blob => {
+      if (version !== this.drawVersion || this.root.querySelector('#studioCanvas') !== canvas) return;
+      this.currentBlob = blob;
+      this.exportControls();
+      if (!blob) this.message('The preview could not be exported. Try a smaller image.', true);
+    }, 'image/png');
+  }
+
   async addPhotos(files) {
-    if (this.busy) return;
-    const selected = [...files].filter(file => file?.type?.startsWith('image/'));
-    if (!selected.length) {
-      this.message('Choose a screenshot or photo first.', true);
-      return;
-    }
+    if (this.busy) { this.message('Images are still opening. Wait before choosing more.', true); return; }
+    const selected = Array.from(files || []);
+    if (!selected.length) return; // Cancelling the picker leaves the working card untouched.
+    if (this.photos.length >= 6) { this.message('Six images are already added. Remove one before adding another.', true); return; }
     this.busy = true;
+    this.currentBlob = null;
+    this.exportControls();
+    const generation = this.imageGeneration, errors = [];
+    let added = 0;
+    this.message('Opening screenshots on this device…');
     try {
-      for (const file of selected.slice(0, 6 - this.photos.length)) {
-        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) {
-          throw Error('Use a JPEG, PNG or WebP image under 20 MB.');
+      for (const file of selected) {
+        if (generation !== this.imageGeneration) break;
+        if (this.photos.length >= 6) { errors.push('Only six images fit. Remove one to add another.'); break; }
+        try {
+          const image = await openScreenshot(file);
+          if (generation !== this.imageGeneration) { image.close?.(); break; }
+          this.photos.push(image); added++;
+        } catch (error) {
+          errors.push(String(file?.name || 'Image').slice(0,80) + ': ' + (error.message || 'Could not open this image.'));
         }
-        const image = await createImageBitmap(file);
-        if (image.width * image.height > 40000000) {
-          image.close();
-          throw Error('That image is too large. Try a smaller screenshot.');
-        }
-        this.photos.push(image);
       }
-      this.message(this.photos.length + ' photo(s) ready. They stay on this device.');
-      this.draw();
-    } catch (error) {
-      this.message(error.message || 'That photo could not be opened.', true);
     } finally {
       this.busy = false;
       const input = this.root.querySelector('#studioPhotos');
       if (input) input.value = '';
+      this.draw(); // A bad file must not hide the valid screenshots in the same batch.
     }
+    if (generation !== this.imageGeneration) return;
+    this.message((added ? added + ' screenshot(s) added to your card. ' : '') + (errors.length ? errors.join(' ') : 'Images stay in this browser. Career, trophy and thumbnail cards use the first image; collage uses all.'), errors.length > 0);
   }
 
   render(state) {
@@ -265,12 +353,22 @@ export class ShareStudio {
       : '<option value="custom" selected>What I enter</option>';
     const demoBadge = demo ? '<span class="pill studio-demo-badge">DEMO DATA · FICTIONAL SAMPLE</span>' : '<span class="pill">Photos stay on this device</span>';
 
-    queueMicrotask(() => this.draw());
+    queueMicrotask(() => {
+      this.captureSource?.dispose();
+      const captureHost=this.root.querySelector('[data-studio-capture-source]');
+      if(captureHost)this.captureSource=mountCaptureSource(captureHost,{onSelect:file=>this.addPhotos([file])});
+      this.draw();
+    });
     return [
       '<div class="intro studio-intro"><div><div class="eyebrow">SHARE YOUR HUNT</div><h1>Trophy studio</h1><p>Make a card or a hunting thumbnail in three quick steps.</p></div>' + demoBadge + '</div>',
-      '<div class="studio-steps" aria-label="Studio steps"><div><b>1</b><span>Pick a style</span></div><div><b>2</b><span>Add a screenshot</span></div><div><b>3</b><span>Save or share</span></div></div>',
-      '<div class="studio-layout"><section id="studioControls" class="panel studio-controls"><h2>Build your image</h2>',
-      '<label>1. Pick a style<select data-design="layout">' + styleOptions + '</select></label>',
+      '<div class="studio-steps" aria-label="Studio steps"><div><b>1</b><span>Add a screenshot</span></div><div><b>2</b><span>Pick a style</span></div><div><b>3</b><span>Save or share</span></div></div>',
+      '<section class="panel studio-controls studio-import" aria-label="Choose your screenshots">',
+      '<div data-studio-capture-source></div>',
+      '<div id="studioDropzone" class="studio-dropzone" tabindex="0"><strong>1. Add an in-game screenshot</strong><span>Choose a saved screenshot from Photos or Files. You can also drop or paste one.</span><button id="studioChoosePhotos" type="button" class="button primary studio-photo-button">Choose screenshots</button><input id="studioPhotos" class="studio-file-input" type="file" accept="image/*,.png,.jpg,.jpeg,.webp,.bmp" multiple><small>Up to 6 images · PNG, JPG, WebP or BMP · 32 MB each</small></div>',
+      '<p id="studioImportStatus" role="status" class="muted small">Screenshots are processed locally, not uploaded.</p>',
+      '<div id="studioPhotoStrip" class="studio-photo-strip" aria-live="polite"></div>',
+      '</section><div class="studio-layout"><section id="studioControls" class="panel studio-controls"><h2>Style your card</h2>',
+      '<label>2. Pick a style<select data-design="layout">' + styleOptions + '</select></label>',
       '<div class="form-grid"><label>Picture shape<select data-design="size">' + sizeOptions + '</select></label><label>Colors<select data-design="theme">' + themeOptions + '</select></label></div>',
       '<label>Title<input data-design="title" maxlength="70" value="' + esc(design.title) + '"></label>',
       '<label>Your name <span class="muted">(optional)</span><input data-design="alias" maxlength="50" placeholder="Only shown on your image" value="' + esc(design.alias) + '"></label>',
@@ -280,9 +378,8 @@ export class ShareStudio {
       '<details class="studio-section"><summary>Stats on your image</summary><label>Use stats from<select data-design="source">' + sourceOptions + '</select></label>',
       '<fieldset class="studio-metrics" ' + (hasStats ? '' : 'hidden') + '><legend>Choose up to 6 stats</legend>' + metricOptions + '</fieldset>',
       '<label>Your own stats <span class="muted">(name: value)</span><textarea data-design="custom" rows="4" maxlength="800" placeholder="Favorite reserve: Askiy Ridge&#10;Best trophy: 9.6">' + esc(design.custom) + '</textarea></label></details>',
-      '<label>Photo fit<select data-design="photoFit"><option value="contain"' + (design.photoFit === 'contain' ? ' selected' : '') + '>Show the whole photo</option><option value="cover"' + (design.photoFit === 'cover' ? ' selected' : '') + '>Center crop to fill</option></select></label>',
-      '<div id="studioDropzone" class="studio-dropzone" tabindex="0"><strong>2. Add screenshots or trophy photos</strong><span>Tap choose, drag files here, or paste a screenshot.</span><label for="studioPhotos" class="button primary studio-photo-button">Choose images</label><input id="studioPhotos" class="studio-file-input" type="file" accept="image/png,image/jpeg,image/webp" capture="environment" multiple><small>Up to 6 images · JPEG, PNG or WebP · 20 MB each</small></div>',
-      '<div id="studioPhotoStrip" class="studio-photo-strip" aria-live="polite"></div>',
+      '<label>Photo fit<select data-design="photoFit"><option value="contain"' + (design.photoFit === 'contain' ? ' selected' : '') + '>Show the whole photo</option><option value="cover"' + (design.photoFit === 'cover' ? ' selected' : '') + '>Crop to fill · adjust each image above</option></select></label>',
+      '<p class="small muted">Career, trophy and thumbnail cards use the first image. Choose Photo collage to show several.</p>',
       '<div class="actions"><button id="studioClearPhotos" class="button subtle" type="button">Clear images</button><button id="studioClearDesign" class="button subtle" type="button">Reset design</button></div>',
       '<p class="tiny muted">Images are processed in this browser. They are not uploaded or saved by this companion.</p></section>',
       '<section class="studio-preview"><div class="panel-head"><div><div class="eyebrow">LIVE PREVIEW</div><h2>Your image</h2></div><span class="small muted">PNG export</span></div><canvas id="studioCanvas" width="1080" height="1080" aria-label="Preview of your hunting image"></canvas><div class="studio-export"><button id="studioDownload" class="button primary" type="button">Save image</button><button id="studioShare" class="button" type="button">Share image</button></div><p id="studioMessage" role="status" class="muted small">Check the preview, then save or share. Stats you enter are labeled on the image.</p></section></div>'
@@ -315,7 +412,7 @@ export class ShareStudio {
     if (!host) return;
     host.innerHTML = this.photos.map((photo, index) => {
       return '<div class="studio-photo"><canvas width="160" height="100" data-photo-preview="' + index + '" aria-label="Photo ' + (index + 1) + '"></canvas><div><button type="button" class="button small" data-photo-left="' + index + '" aria-label="Move photo ' + (index + 1) + ' left"' + (index === 0 ? ' disabled' : '') + '>&larr;</button><button type="button" class="button small" data-photo-remove="' + index + '" aria-label="Remove photo ' + (index + 1) + '">&times;</button></div></div>';
-    }).join('');
+    }).join('') + (this.design.photoFit === 'cover' ? this.photos.map((photo,index) => '<details class="studio-section"><summary>Adjust crop · image ' + (index + 1) + '</summary><label>Left / right<input type="range" min="0" max="100" value="' + Math.round((photo.studioCrop?.x ?? 0.5)*100) + '" data-photo-focus="x" data-photo-index="' + index + '"></label><label>Top / bottom<input type="range" min="0" max="100" value="' + Math.round((photo.studioCrop?.y ?? 0.5)*100) + '" data-photo-focus="y" data-photo-index="' + index + '"></label></details>').join('') : '');
     host.querySelectorAll('canvas').forEach((canvas, index) => {
       const context = canvas.getContext('2d');
       context.fillStyle = '#101711';
@@ -324,10 +421,11 @@ export class ShareStudio {
     });
   }
 
-  draw() {
-    this.renderPhotos();
+  draw(renderPhotos = true) {
+    if (renderPhotos) this.renderPhotos();
     const canvas = this.root.querySelector('#studioCanvas');
     if (!canvas) return;
+    const version = ++this.drawVersion;
     this.currentBlob = null;
     const design = this.design;
     const speciesElement = this.root.querySelector('#studioSpeciesLabel');
@@ -357,11 +455,12 @@ export class ShareStudio {
     context.fillStyle = accent;
     context.fillRect(pad, pad, width * 0.09, 7);
     context.fillStyle = ink;
-    fitted(context, design.alias ? design.alias.toUpperCase() : 'COTW COMPANION', pad, pad + 45, width - (2 * pad), Math.min(28, width * 0.025));
+    fitted(context, design.alias ? design.alias.toUpperCase() : 'GRINDZONE', pad, pad + 45, width - (2 * pad), Math.min(28, width * 0.025));
     const metrics = this.metrics();
 
     if (design.layout === 'thumbnail') {
       this.drawThumbnail(context, metrics, width, height, pad, background, accent, ink);
+      this.prepareExport(canvas, version);
       return;
     }
 
@@ -372,9 +471,9 @@ export class ShareStudio {
     const top = pad + (design.species && design.subtitle ? 250 : 210);
     const bottom = height - 110;
     const available = Math.max(120, bottom - top);
-    if (design.layout === 'collage' || design.layout === 'trophy') {
-      const count = design.layout === 'trophy' ? 1 : Math.max(2, Math.min(6, this.photos.length || 4));
-      const columns = design.layout === 'trophy' ? 1 : count > 4 ? 3 : 2;
+    if (design.layout === 'collage' || design.layout === 'trophy' || this.photos.length) {
+      const count = design.layout === 'collage' ? Math.max(1, Math.min(6, this.photos.length || 4)) : 1;
+      const columns = count === 1 ? 1 : count > 4 ? 3 : 2;
       const rows = Math.ceil(count / columns);
       const gap = 12;
       const imageHeight = metrics.length ? available * 0.64 : available;
@@ -398,6 +497,7 @@ export class ShareStudio {
       this.drawMetrics(context, metrics.length ? metrics : [{label: 'YOUR RECORD', value: 'Choose stats in the editor'}], pad, top, width - (2 * pad), available, accent, ink, 2);
     }
     this.drawFooter(context, width, height, pad, accent, ink);
+    this.prepareExport(canvas, version);
   }
 
   drawThumbnail(context, metrics, width, height, pad, background, accent, ink) {
@@ -405,7 +505,7 @@ export class ShareStudio {
     const imageX = width - imageWidth;
     context.fillStyle = '#0c1110';
     context.fillRect(imageX, 0, imageWidth, height);
-    if (this.photos[0]) cover(context, this.photos[0], imageX, 0, imageWidth, height, 'cover');
+    if (this.photos[0]) cover(context, this.photos[0], imageX, 0, imageWidth, height, this.design.photoFit);
     context.fillStyle = background;
     context.globalAlpha = 0.92;
     context.fillRect(0, 0, imageX + 10, height);
@@ -458,24 +558,27 @@ export class ShareStudio {
     context.stroke();
     context.globalAlpha = 1;
     context.fillStyle = ink;
-    const source = this.design.source === 'saved'
+    const source = !this.metrics().length ? 'PLAYER SCREENSHOT' : this.design.source === 'saved'
       ? (this.state?.demo ? 'DEMO DATA · FICTIONAL SAMPLE' : 'FROM GAME SAVES · ' + (this.state?.career?.savedAt ? new Date(this.state.career.savedAt).toLocaleDateString() : 'last update'))
       : 'CUSTOM STATS · ENTERED BY PLAYER';
     fitted(context, source, pad, height - 47, width * 0.68, width * 0.017, 'normal');
     context.textAlign = 'right';
-    fitted(context, 'COTW COMPANION', width - pad, height - 47, width * 0.25, width * 0.017);
+    fitted(context, 'GRINDZONE', width - pad, height - 47, width * 0.25, width * 0.017);
     context.textAlign = 'left';
   }
 
   async export(share) {
+    if (this.exporting) return;
     try {
       const canvas = this.root.querySelector('#studioCanvas');
       if (!canvas) throw Error('Open the studio preview first.');
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-      if (!blob) throw Error('Could not create the image.');
+      const blob = this.currentBlob;
+      if (this.busy || !blob) throw Error('Wait for your screenshot preview to finish before saving.');
+      this.exporting = true;
+      this.exportControls();
       const filename = this.design.layout === 'thumbnail' ? 'cotw-hunting-thumbnail.png' : 'cotw-hunting-card.png';
       const file = new File([blob], filename, {type: 'image/png'});
-      if (share && navigator.canShare?.({files: [file]})) {
+      if (share && navigator.share && navigator.canShare?.({files: [file]})) {
         await navigator.share({files: [file], title: this.design.title || 'COTW Companion'});
         this.message('Image shared through your device.');
         return;
@@ -491,6 +594,9 @@ export class ShareStudio {
       this.message(share ? 'Sharing is not available in this browser. Your image is ready to save instead.' : 'Your image is ready to save. Your photos were not uploaded.');
     } catch (error) {
       if (error.name !== 'AbortError') this.message(error.message || 'Could not export this image.', true);
+    } finally {
+      this.exporting = false;
+      this.exportControls();
     }
   }
 }

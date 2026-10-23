@@ -1,3 +1,9 @@
+import {isMain} from './updates/entry.mjs';
+import {ManagedChild} from './updates/child.mjs';
+import {runtimeIdentity,runtimeScope} from './lib/runtime-identity.mjs';
+import {locationSearchParams} from './lib/hunt-locations.mjs';
+import {herdSearchParams,projectHerdView} from './lib/herd-view.mjs';
+import {loadHerdReference,withHerdReference} from './lib/herd-reference.mjs';
 import http from 'node:http';
 import {readFileSync,existsSync,realpathSync,mkdirSync} from 'node:fs';
 import path from 'node:path';
@@ -7,10 +13,14 @@ import {Store} from './lib/store.mjs';
 import {Observer,inside} from './lib/observer.mjs';
 import {reserveId} from './lib/core.mjs';
 import {createPhoneAccess} from './lib/phone-access.mjs';
+// Capture the build before serving assets; later disk changes cannot relabel a running process.
+const bootRuntime=runtimeIdentity(path.dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_GITHUB_FEEDBACK_URL='https://api.github.com/repos/infotradescout/cotw-field-companion/issues?state=open&labels=feedback&per_page=20';
-export async function createApp({dataDir,saveDir=null,port=47831,interval=5000,phoneRelayUrl=process.env.COMPANION_PHONE_RELAY_URL,phoneEnrollmentToken=process.env.COMPANION_PHONE_ENROLLMENT_TOKEN,allowInsecurePhoneLoopback=false,feedbackUrl=process.env.COMPANION_FEEDBACK_URL,feedbackOwnerToken=process.env.COMPANION_FEEDBACK_OWNER_TOKEN,feedbackOwnerOrigin=process.env.COMPANION_FEEDBACK_OWNER_ORIGIN,githubFeedbackUrl=process.env.COMPANION_FEEDBACK_GITHUB_URL||DEFAULT_GITHUB_FEEDBACK_URL}={}) {
+export async function createApp({managedGate=null,dataDir,saveDir=null,port=47831,interval=5000,phoneRelayUrl=process.env.COMPANION_PHONE_RELAY_URL,phoneEnrollmentToken=process.env.COMPANION_PHONE_ENROLLMENT_TOKEN,allowInsecurePhoneLoopback=false,feedbackUrl=process.env.COMPANION_FEEDBACK_URL,feedbackOwnerToken=process.env.COMPANION_FEEDBACK_OWNER_TOKEN,feedbackOwnerOrigin=process.env.COMPANION_FEEDBACK_OWNER_ORIGIN,githubFeedbackUrl=process.env.COMPANION_FEEDBACK_GITHUB_URL||DEFAULT_GITHUB_FEEDBACK_URL}={}) {
   const appDir=path.dirname(fileURLToPath(import.meta.url));
   if(!dataDir)throw Error('Companion data directory is required');
+  const identity=bootRuntime;
+  if(process.env.GRINDZONE_EXPECTED_FINGERPRINT&&process.env.GRINDZONE_EXPECTED_FINGERPRINT!==identity.fingerprint)throw Error('The selected package changed during startup. No journal was opened; restart the complete package.');
   saveDir=saveDir?realpathSync(saveDir):null;dataDir=path.resolve(dataDir);
   let parent=dataDir;while(!existsSync(parent))parent=path.dirname(parent);
   const resolved=path.join(realpathSync(parent),path.relative(parent,dataDir));
@@ -18,7 +28,7 @@ export async function createApp({dataDir,saveDir=null,port=47831,interval=5000,p
   mkdirSync(dataDir,{recursive:true});dataDir=realpathSync(dataDir);
   if(saveDir&&process.permission?.has('fs.write',saveDir))throw Error('Refusing to start with save-folder write permission');
   const ratingFile=path.join(appDir,'lib/rating-data.json');
-  const ratingCatalog=existsSync(ratingFile)?JSON.parse(readFileSync(ratingFile,'utf8')):null;
+  const ratingCatalog=withHerdReference(existsSync(ratingFile)?JSON.parse(readFileSync(ratingFile,'utf8')):null,loadHerdReference());
   const gearCatalog=JSON.parse(readFileSync(path.join(appDir,'lib/gear-data.json'),'utf8'));
   const mapsCatalog=JSON.parse(readFileSync(path.join(appDir,'lib/maps-data.json'),'utf8'));
   const reference=JSON.parse(readFileSync(path.join(appDir,'lib/reference.json'),'utf8'));
@@ -26,17 +36,21 @@ export async function createApp({dataDir,saveDir=null,port=47831,interval=5000,p
   reference.equipment=gearCatalog.equipmentNames||{};
   const store=new Store(path.join(dataDir,'journal.sqlite'));
   const observer=new Observer(store,saveDir,reference,{interval});await observer.start();
-  const runCommand=async body=>{if(body.op==='observer.scan'){await observer.scan(true);return {scanned:true,lastCycle:observer.lastCycle};}return store.mutate(observer.profile,body.requestId,body,()=>store.command(observer.profile,body));};
+  const runCommand=async body=>{if(body.op==='observer.scan'){await observer.scan(true);return {scanned:true,lastCycle:observer.lastCycle};}return store.mutate(observer.profile,body.requestId,body,()=>observer.command(body));};
   const phoneServiceFile=path.join(appDir,'lib/phone-service.json');
   const configuredRelay=phoneRelayUrl??(existsSync(phoneServiceFile)?JSON.parse(readFileSync(phoneServiceFile,'utf8')).relayUrl:null);
   const phone=createPhoneAccess({store,observer,relayUrl:configuredRelay,enrollmentToken:phoneEnrollmentToken,runCommand,allowInsecureLoopback:allowInsecurePhoneLoopback});
-  void phone.start().catch(()=>{});
+  if(!managedGate?.managed)void phone.start().catch(()=>{});
   const feedbackEndpoint=feedbackUrl?new URL(feedbackUrl):null;
   if(feedbackEndpoint&&!['https:','http:'].includes(feedbackEndpoint.protocol))throw Error('Companion feedback URL must use HTTP or HTTPS');
   if(feedbackEndpoint){feedbackEndpoint.pathname=feedbackEndpoint.pathname.replace(/\/+$/,'')+'/';feedbackEndpoint.search='';feedbackEndpoint.hash='';}
   const token=randomBytes(32).toString('hex');
+  const runtime=Object.freeze({...identity,scope:runtimeScope(dataDir,saveDir)});
   const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'};
-  const assets=new Map(['/','/index.html','/app.js','/species-style.js','/commands.js','/route-stops.js','/harvest-view.js','/phone-ui.js','/phone.css','/qrcode.js','/map.js','/style.css','/icon.svg','/reference.js','/reference-core.js','/data-client.js','/career.js','/studio.js','/field-library.js','/field-theme.css','/hunting-workspace.css','/map-geometry.js','/terrain-layer.js','/map-atlas.js','/maps.css'].map(url=>[url,readFileSync(path.join(appDir,'public',url==='/'?'index.html':url.slice(1)))]));
+  const assets=new Map(['/updates-ui.js','/herd-view.js','/herd-view.css','/','/index.html','/app.js','/zone-window.js','/dashboard.js','/save-data.js','/save-data.css','/hunt-locations.js','/hunt-locations.css','/grinds.js','/species-style.js','/commands.js','/route-stops.js','/route-setup.js','/setup-catalog.js','/harvest-view.js','/phone-ui.js','/phone.css','/qrcode.js','/map.js','/style.css','/icon.svg','/reference.js','/reference-core.js','/data-client.js','/career.js','/studio.js','/field-library.js','/field-theme.css','/hunting-workspace.css','/map-geometry.js','/terrain-layer.js','/map-atlas.js','/maps.css'].map(url=>[url,readFileSync(path.join(appDir,'public',url==='/'?'index.html':url.slice(1)))]));
+  for(const url of ['/capture-source.js','/capture-source.css','/screenshot-decode.js'])assets.set(url,readFileSync(path.join(appDir,'public',url.slice(1))));
+  // This control is local-PC only; signed-phone HTML and permissions are unchanged.
+  for(const url of ['/','/index.html'])assets.set(url,Buffer.from(assets.get(url).toString('utf8').replace('</body>','<script type="module" src="/updates-ui.js"></script></body>')));
   const server=http.createServer(async(req,res)=>{
     const actualPort=server.address().port;
     const goodHosts=[`127.0.0.1:${actualPort}`,`localhost:${actualPort}`];
@@ -73,7 +87,13 @@ export async function createApp({dataDir,saveDir=null,port=47831,interval=5000,p
     if(!goodHosts.includes(req.headers.host)||!sameOrigin||!allowedSite)return json(403,{error:'Only same-origin local access is accepted'});
     try {
       const url=new URL(req.url,'http://127.0.0.1');
-      if(req.method==='GET'&&url.pathname==='/api/bootstrap')return json(200,{token,version:'0.4.1',selectedReserve:observer.source('reserveworlddata_adf')?.payload?.reserve??19});
+      if(req.method==='GET'&&url.pathname==='/api/bootstrap')return json(200,{token,version:identity.version,runtime,selectedReserve:observer.source('reserveworlddata_adf')?.payload?.reserve??19});
+      if(managedGate?.blocked)return json(503,{error:'GrindZone is finishing update startup. Please wait.'});
+      if(req.method==='GET'&&url.pathname==='/api/updates/status')return json(200,await (managedGate||new ManagedChild({transport:{}})).request('status'));
+      if(req.method==='POST'&&url.pathname==='/api/updates/check'){
+        if(!localTokenOk())return json(403,{error:'Missing local session token'});
+        return json(200,await (managedGate||new ManagedChild({transport:{}})).request('check'));
+      }
       if(req.method==='GET'&&url.pathname==='/api/phone/status')return json(200,phone.status());
       if(req.method==='GET'&&url.pathname==='/api/maps')return json(200,mapsCatalog);
       if(req.method==='GET'&&url.pathname==='/api/gear')return json(200,gearCatalog);
@@ -91,7 +111,13 @@ export async function createApp({dataDir,saveDir=null,port=47831,interval=5000,p
         if(!localTokenOk())return json(403,{error:'Missing local session token'});
         return feedbackProxy(`/v1/owner/feedback/${feedbackRead[1]}/read`,'POST');
       }
-      if(req.method==='GET'&&url.pathname==='/api/state')return json(200,observer.state(reserveId(url.searchParams.get('reserve')??19)));
+      if(req.method==='GET'&&url.pathname==='/api/herds')return json(200,projectHerdView(observer.herdView(herdSearchParams(url.searchParams))));
+      if(req.method==='GET'&&url.pathname==='/api/locations')return json(200,observer.locationHistory(locationSearchParams(url.searchParams)));
+      if(req.method==='GET'&&url.pathname==='/api/state'){
+        const speciesValues=url.searchParams.getAll('huntSpecies');
+        if(speciesValues.length>1||speciesValues.length===1&&(!speciesValues[0]||speciesValues[0].length>120||/[\x00-\x1f\x7f]/.test(speciesValues[0])))throw Object.assign(Error('Invalid Hunt species'),{status:400});
+        return json(200,observer.state(reserveId(url.searchParams.get('reserve')??19),speciesValues.length?{huntSpecies:speciesValues[0]}:undefined));
+      }
       if(req.method==='GET'&&url.pathname==='/api/export'){
         res.writeHead(200,{...headers,'Content-Type':'application/json','Content-Disposition':'attachment; filename="COTW-field-journal.json"'});return res.end(JSON.stringify(store.exportJournal(observer.profile),null,2));
       }
@@ -113,9 +139,10 @@ export async function createApp({dataDir,saveDir=null,port=47831,interval=5000,p
   // The old address is a redirect owned by this process, never a second observer or journal.
   let legacyRedirect=null;
   if(port===47831){legacyRedirect=http.createServer((req,res)=>{if(!['127.0.0.1:47821','localhost:47821'].includes(req.headers.host)){res.writeHead(403);return res.end();}if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(410,{'Content-Type':'text/plain'});return res.end('Use the canonical COTW Field Companion.');}res.writeHead(302,{Location:'http://127.0.0.1:47831/', 'Cache-Control':'no-store'});res.end();});await new Promise(resolve=>{legacyRedirect.once('error',()=>{legacyRedirect=null;resolve();});legacyRedirect.listen(47821,'127.0.0.1',resolve);});}
-  const close=async()=>{await phone.close();if(legacyRedirect)legacyRedirect.close();observer.stop();while(observer.busy)await new Promise(r=>setTimeout(r,25));await new Promise(r=>server.close(r));store.close();};
-  return {server,store,observer,phone,close,url:`http://127.0.0.1:${server.address().port}`};
+  let closing;const close=()=>closing||(closing=(async()=>{await phone.close();if(legacyRedirect)legacyRedirect.close();observer.stop();while(observer.busy)await new Promise(r=>setTimeout(r,25));await new Promise(r=>server.close(r));store.close();})());
+  const app={server,store,observer,phone,close,url:`http://127.0.0.1:${server.address().port}`};
+  managedGate?.ready(app,runtime,()=>phone.start());return app;
 }
-if(process.argv[1]&&fileURLToPath(import.meta.url)===path.resolve(process.argv[1])){
-  try{const app=await createApp({dataDir:process.env.COMPANION_DATA_DIR,saveDir:process.env.COTW_SAVE_DIR||null,port:Number(process.env.COMPANION_PORT||47831)});console.log(`COTW Field Companion listening at ${app.url}\nSave access: READ ONLY. Data: ${process.env.COMPANION_DATA_DIR}\nClose this window or press Ctrl+C to stop.`);let ending=false;for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{if(ending)return;ending=true;await app.close();process.exit(0);});}catch(e){console.error(e.message);process.exitCode=1;}
+if(isMain(import.meta)){
+  try{const app=await createApp({managedGate:new ManagedChild(),dataDir:process.env.COMPANION_DATA_DIR,saveDir:process.env.COTW_SAVE_DIR||null,port:Number(process.env.COMPANION_PORT||47831)});console.log(`COTW Field Companion listening at ${app.url}\nSave access: READ ONLY. Data: ${process.env.COMPANION_DATA_DIR}\nClose this window or press Ctrl+C to stop.`);let ending=false;for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{if(ending)return;ending=true;await app.close();process.exit(0);});}catch(e){console.error(e.message);process.exitCode=1;}
 }

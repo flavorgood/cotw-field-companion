@@ -1,0 +1,78 @@
+/** Actual app + binary decoder + SQLite + signed phone relay, entirely synthetic player data. */
+import assert from 'node:assert/strict';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,utimesSync,readFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {randomBytes,createHash} from 'node:crypto';
+import {createRequire} from 'node:module';
+import {execFileSync} from 'node:child_process';
+import {createApp} from '../server.mjs';
+import {createActivatedPhoneRelay} from '../cloud/activation-server.mjs';
+import {fixture,defs,animal} from '../tests/fixtures.mjs';
+import {writeSaveDataFixture,saveHashes} from '../tests/save-data-workflow-fixture.mjs';
+import {readyDiscoveryReader} from '../tests/zone-discovery-fixture.mjs';
+import {findHerdRule} from '../lib/herd-trophies.mjs';
+const toolRoot=path.resolve(process.argv[2]||'../browser-tools'),output=path.resolve(process.argv[3]||'../evidence/trophy-browser');
+const require=createRequire(path.join(toolRoot,'package.json')),{chromium}=require('playwright');
+const root=mkdtempSync(path.join(tmpdir(),'grindzone-trophy-bands-')),save=path.join(root,'save');mkdirSync(save);writeSaveDataFixture(save);
+mkdirSync(output,{recursive:true});
+const files=['lib/herd-trophies.mjs','lib/herd-view.mjs','public/herd-view.js','public/herd-view.css','lib/herd-reference.json','tools/verify-trophy-bands.mjs'];
+const proof={startedAt:new Date().toISOString(),sourceHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),sourceFiles:Object.fromEntries(files.map(p=>[p,createHash('sha256').update(readFileSync(p)).digest('hex')])),passed:false,checks:[],screenshots:[],layouts:[],scope:'Real local app shell, binary population reader, disposable SQLite and locally signed paired-phone relay. Synthetic animals only; no owner journal, game save, installed application, Xbox account or physical phone acceptance.'};
+let app,relay,browser;const errors=[];
+const until=async(fn,label)=>{for(let i=0;i<150;i++){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw Error('Timed out: '+label);};
+const read=async page=>page.evaluate(async()=>{const r=await fetch(new URL('api/herds?reserve=19',location.href),{cache:'no-store'});return {status:r.status,value:await r.json()};});
+try{
+ relay=await createActivatedPhoneRelay({key:randomBytes(32),publicOrigin:'http://127.0.0.1:0/grindzone',allowInsecureLoopback:true});
+ assert.equal((await fetch(relay.origin+'/api/herds?reserve=19&trophy=gold')).status,401);
+ const open=async()=>{const a=await createApp({dataDir:path.join(root,'journal'),saveDir:save,port:0,interval:60000,phoneRelayUrl:relay.origin,phoneEnrollmentToken:null,allowInsecurePhoneLoopback:true,feedbackUrl:null,feedbackOwnerToken:null,githubFeedbackUrl:null});a.observer.zoneReference.close();a.observer.zoneReference=readyDiscoveryReader();return a;};
+ app=await open();await until(()=>!app.observer.busy,'initial reader idle');
+ const ref=app.observer.herdReference;assert.equal(ref.source.blob,'4f531a152ad254633832e76cee54c7e25cd0abbc');
+ const deer=app.observer.reference.populations['3845994887'],r=findHerdRule(ref,deer.key),t=r.trophyThresholds;
+ const [femaleHash,femaleSpecies]=Object.entries(app.observer.reference.populations).find(([,s])=>s.key==='gemsbok');
+ const f=findHerdRule(ref,femaleSpecies.key);assert.equal(f.femaleDiamondCapable,true);
+ proof.reference={commit:ref.source.commit,blob:ref.source.blob,ordinarySpecies:deer.key,femaleDiamondSpecies:femaleSpecies.key};
+ const herdDefs={...defs,animal:{...defs.animal,Id:'u32',IsGreatOne:'u8'}};
+ const a=(id,sex,score,go=0)=>({...animal(id,sex),Id:id,Score:score,IsGreatOne:go});
+ const group=(members,paths=[101,102,103],area=100)=>({SpawnAreadId:area,NeedZonePathGuids:paths,Animals:members});
+ const first=group([a(1,2,0),a(2,1,t.bronze+1),a(3,1,t.silver+1),a(4,1,t.gold+1),a(5,1,t.diamond+1),a(6,1,t.diamond+20,1)]),second=group([a(7,1,t.gold+1),a(8,2,0)]);
+ const population=path.join(save,'animal_population_19');
+ const writePopulation=(groups,time)=>{writeFileSync(population,fixture(herdDefs,'rootPopulation',{ReserveSeed:123,Populations:[{NameHashId:3845994887,Revision:1,Groups:groups},{NameHashId:Number(femaleHash),Revision:1,Groups:[group([a(9,2,f.trophyThresholds.gold+1),a(10,2,f.diamondScore+1)],[201,202,203],200)]}]}));utimesSync(population,new Date(time),new Date(time));};
+ const zone=(id,slot,localization)=>({Position:{X:8000+id,Y:0,Z:8100},NeedZoneId:id,NeedType:slot+1,NeedZoneStartTimeHours:slot*8,NeedZoneEndTimeHours:((slot+1)*8)%24,AnimalTypeLocalizationName:localization,NeedZoneScheduleIndex:slot});
+ writeFileSync(path.join(save,'found_need_zones_adf'),fixture(defs,'rootZones',{NZData:[{ReserveId:19,NeedZoneData:[...Array.from({length:3},(_,i)=>zone(101+i,i,1124598738)),...Array.from({length:3},(_,i)=>zone(201+i,i,987654))]}]}));
+ writePopulation([first,second],'2026-09-30T12:00:00Z');await app.observer.scan(true);let expected=saveHashes(save);
+ app.observer.command({op:'settings',spoilers:true,confirmSpoilers:true});
+ browser=await chromium.launch({headless:true,args:['--disable-dev-shm-usage']});
+ const pc=await browser.newPage({viewport:{width:1440,height:1000}});pc.on('pageerror',e=>errors.push(e.message));
+ await pc.goto(app.url+'/#insights',{waitUntil:'domcontentloaded'});await pc.locator('[data-population-species]').first().waitFor();
+ const checkDeer=async page=>{const row=page.locator(`[data-population-species="${deer.key}"]`);for(const [label,value] of [['Animals','8'],['No trophy','2'],['Bronze potential','1'],['Silver potential','1'],['Gold potential','2'],['Diamond potential','1'],['Saved Great Ones','1']])assert.equal(await row.locator(`[data-label="${label}"]`).innerText(),value,label);};
+ await checkDeer(pc);const ids=(await read(pc)).value.herds.map(h=>h.id);assert.equal(new Set(ids).size,3);
+ proof.checks.push('Actual PC Insights shows all five ordinary score bands and explicit GO; 8 deer animals partition into 2 no-trophy, 1 Bronze, 1 Silver, 2 Gold, 1 Diamond and 1 GO.');
+ await pc.goto(app.url+'/#settings');await pc.locator('[data-action="phone-enable"]').click();await pc.locator('#modal input[name="consent"]').check();await pc.locator('#submitDialog').click();await pc.locator('[data-phone-link]').waitFor({timeout:30000});
+ const pair=await pc.locator('[data-phone-link]').inputValue();
+ const phone=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});phone.on('pageerror',e=>errors.push(e.message));
+ await phone.goto(pair);await phone.locator('#pair').click();await phone.waitForURL(u=>u.hash==='#map');
+ for(const [page,width] of [[pc,1440],[phone,390],[phone,320]]){
+  await page.setViewportSize({width,height:width===1440?1000:844});await page.goto((page===pc?app.url:relay.origin)+'/#insights');await page.locator('[data-population-species]').first().waitFor();await checkDeer(page);
+  const female=page.locator(`[data-population-species="${femaleSpecies.key}"]`);assert.equal(await female.locator('[data-label="Gold potential"]').innerText(),'1');assert.equal(await female.locator('[data-label="Diamond potential"]').innerText(),'1');assert.equal(await female.locator('.female-diamond-mark').count(),1);
+  const layout=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));assert.ok(layout.scroll<=width+1);proof.layouts.push(layout);
+  if(width===1440)await page.locator('.gz-population-overview').scrollIntoViewIfNeeded();else await page.locator(`[data-population-species="${deer.key}"]`).evaluate(row=>row.scrollIntoView({block:'start'}));
+  const shot=path.join(output,'insights-'+width+'.png');await page.screenshot({path:shot,fullPage:false});proof.screenshots.push(shot);
+ }
+ proof.checks.push('Full app and signed phone show identical band counts and the female Diamond symbol at 1440/390/320px without page overflow.');
+ await phone.locator(`[data-population-species="${deer.key}"] [data-herd-band="bronze"]`).click();
+ await until(async()=>await phone.locator('[data-herd-id]').count()===1,'Bronze count to herd');
+ assert.equal(await phone.locator('[data-herd-filter="species"]').inputValue(),deer.key);assert.equal(await phone.locator('[data-herd-filter="trophy"]').inputValue(),'bronze');
+ const filtered=await phone.locator('gz-herds').evaluate(e=>({summary:e.data.summary,herd:e.data.herds[0]}));assert.equal(filtered.summary.animals,6);assert.equal(filtered.summary.golds,1);assert.equal(filtered.summary.bronzes,1);assert.ok(ids.includes(filtered.herd.id));
+ await phone.locator(`[data-herd-map="${filtered.herd.id}"]`).click();await until(()=>phone.locator('gz-herds').evaluate(e=>e.map?.data?.zones?.length===3),'band herd zone map');
+ assert.deepEqual(new Set(await phone.locator('gz-herds').evaluate(e=>e.map.data.zones.map(z=>z.need))),new Set(['feeding','drinking','resting']));
+ await phone.locator('.gz-herd-map').scrollIntoViewIfNeeded();const mapShot=path.join(output,'bronze-herd-zones-320.png');await phone.screenshot({path:mapShot,fullPage:false});proof.screenshots.push(mapShot);
+ proof.checks.push('Selecting a Bronze species count opens the same mixed herd with all six animals and all three assigned zone activity types; unrelated bands remain visible as whole-herd counts.');
+ writePopulation([second,{...first,Animals:[...first.Animals].reverse()}],'2026-09-30T12:01:00Z');expected=saveHashes(save);await app.observer.scan(true);
+ assert.deepEqual((await read(phone)).value.herds.map(h=>h.id),ids);await phone.locator('[data-herd-retry]').click();await until(()=>phone.locator('gz-herds').evaluate(e=>e.data?.savedAt==='2026-09-30T12:01:00.000Z'),'fresh bands after reorder');assert.equal(await phone.locator('[data-herd-id]').count(),1);
+ await app.close();app=await open();await until(async()=>{try{return (await read(phone)).status===200;}catch{return false;}},'SQLite restart and signed relay reconnect');assert.deepEqual((await read(phone)).value.herds.map(h=>h.id),ids);
+ proof.checks.push('Synthetic binary reorder and actual SQLite restart preserve counts, stable herd IDs and signed phone reconnection.');
+ app.observer.command({op:'settings',spoilers:false});await phone.locator('[data-herd-retry]').click();await until(async()=>await phone.locator('[data-herd-id]').count()===0,'spoiler-off clears bands');assert.equal((await read(phone)).value.summary,null);assert.equal(await phone.locator('.gz-herd-map svg').count(),0);
+ assert.deepEqual(saveHashes(save),expected);assert.deepEqual(errors,[]);
+ proof.checks.push('Spoiler revocation clears band results and map; anonymous relay denied; all synthetic game-save bytes unchanged by inspection; zero browser page errors.');proof.passed=true;
+}catch(error){proof.error=String(error.stack||error).replace(/pair=[A-Za-z0-9_-]{43}/g,'pair=[redacted]');process.exitCode=1;}
+finally{await browser?.close();await app?.close().catch(()=>{});await relay?.close();rmSync(root,{recursive:true,force:true});proof.finishedAt=new Date().toISOString();writeFileSync(path.join(output,'result.json'),JSON.stringify(proof,null,2));console.log(JSON.stringify(proof,null,2));}

@@ -1,0 +1,11 @@
+# Population snapshot recovery: screenshot follow-up
+
+Owner screenshot: Population insights for Te Awaroa, spoilers on, career Diamonds 5 / Great Ones 0, but no readable herd snapshot. This is a failed gameplay outcome. The screenshot does not establish the exact local source-file status or prove data deletion.
+
+Narrow repair on 91baf1ac28b2f47594606f9688ff337c7d10d94d: rebuild missing or source-mismatched companion herd indexes from retained decoded populations before a reader scan, even when the original game file is no longer available. Use the original saved time, preserve source metadata and journal, do not create harvests, and keep stale labeling. A missing/invalid optional spawn area no longer rejects readable animals and paths; it is excluded from structural identity matching, not guessed. Unsupported existing identity schemas are not overwritten. Failed transactional writes preserve sequence and source and retry on a later scan.
+
+Executed locally: 62 focused native checks passed with zero failures/skips, including 10 new recovery cases and the existing herd model/SQLite/UI-string/bridge checks. This uses real SQLite and the canonical observer with synthetic binary saves and reference/statistics fixtures. It is not full production-catalog or rendered device acceptance. tools/verify-herd-recovery.mjs is a prepared actual-PC/paired-phone upgrade journey; run it through the existing release gate before claiming browser or delivery acceptance.
+
+The larger six-file map-population/trophy-band candidate from the previous conversation remains preserved in GrindZone-map-population-repair-source-and-evidence.zip. A combined local revision with recovery and clearer diagnostic messages passed 124 checks, but is NOT this narrow source repair. Do not claim Bronze/Silver/Gold/difficulty map integration delivered by this commit or discard the remaining candidate. Restoring the reader is a prerequisite, not acceptance of the original complete gameplay requirement.
+
+No owner PC, save, private journal, media, provider, signing identity, database or infrastructure was accessed or changed. Preserve Xbox-first, installed startup, remaining Phase 1 and deferred SI remediation requirements. Read the actual new release result before saying this is live or installed.

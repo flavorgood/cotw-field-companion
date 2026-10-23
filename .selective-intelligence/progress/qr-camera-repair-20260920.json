@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "si.progress-checkpoint.v1",
+  "checkpointId": "progress-20260920-qr-camera-repair-live",
+  "outcome": "Repair the QR camera experience itself. The owner's successful private-link fallback does not establish QR acceptance or finished-product acceptance.",
+  "scope": ["PC Settings QR rendering and expiry", "Existing one-use private pairing", "Preserve concurrent phone-first grind and copy-link changes", "Existing paid host and Windows download only"],
+  "prohibitions": ["Do not use Desktop Commander or another route to evade the prior denied PC installation.", "Do not publish QR tokens, private links, owner screenshots or game data.", "Never modify game saves or replace the durable player journal.", "Do not weaken one-use pairing, expiry, source ownership or scan assertions.", "Do not claim physical-camera or full-product acceptance from generated-image tests."],
+  "source": {
+    "repository": "infotradescout/cotw-field-companion",
+    "branch": "fix/hunting-workflow-20260918",
+    "runtimeRevision": "52e0d062d994bb4bdc26a7248bd78808c0f0aa7b",
+    "preservedConcurrentBase": "0c35a0f1d4e17ac22d2c83c84ab8765453eaa402",
+    "uiBlob": "a33745e5516f05ded0228afa9d8da03aed67f2e9",
+    "cssBlob": "8925420a1628272553a7cdce955865172a248bfa",
+    "browserGateBlob": "f2006c5881914443303efbe88fb804fc4b4c5b71"
+  },
+  "progress": {
+    "completedVerified": [
+      "Larger black-on-white QR, six-module white margins, explicit enlargement control, stable live expiry countdown and removal of expired private material. Requesting a replacement immediately clears the invalidated old code. New-pair URL and expiry are checked before rendering.",
+      "Preserved the concurrently delivered copy-link/clipboard recovery, disconnected-code guards, explanatory old-copy message and compact first-harvest grind layout. Both source conflicts returned409 and were reconciled against the current files; no concurrent changes were overwritten.",
+      "15 local UI logic/style checks passed at predecessor a01cf1e; those are distinct from the complete exact-source hosted tests. The final UI changes default displayed module pitch from6 to8 pixels.",
+      "Exact final source52e0d062 passed363 hosted native tests with zero failures, cancellations or skips.",
+      "Actual rendered QR decoded correctly under all12 conditions: default424px,240px framing,216px framing,mild blur,7-degree tilt,JPEG,reduced brightness,enlarged636px,80% CSS scaling,125% CSS scaling,390px viewport and forced-colors mode.",
+      "The full actual-app Chromium journey passed both locally and against the deployed public HTTPS relay. It includes consent, independent QR decode, pairing, automatic synthetic-save updates, phone Pause/Resume, app restart, rejected reused QR, disconnect503 and anonymous401. The first recent harvest remains above the phone dock with no scrolling.",
+      "Normal Sway PR257 and PR258 merges changed only the two dependency pins. Final host54aaa61fc91a6c60965bea5f1651ef99be401a0e deployed successfully. A same-source deployment explicitly verified the public relay and finished live2026-09-20T21:59:55.258454Z.",
+      "Matching Windows download contains60 files,36244428 bytes, SHA2564e43d86f10c064190680ef1cae402767071cbf44ffa465d5ed0e79b0f660850d. No private enrollment credential or player data is in the archive."
+    ],
+    "changedUnverified": [
+      "The exact cause of the owner's original camera failure was not established. No owner QR image or physical camera was inspected. Physical-camera scanning remains open until the owner tests the new code.",
+      "No installed Windows application or player device was accessed or updated. The QR renderer runs in the PC copy, so the owner needs the current ordinary download to see the new controls; an existing paired phone does not need to be disconnected.",
+      "Full-product acceptance remains false. Preserve all requirements and the next substantive work in product-acceptance.md and the concurrent first-phone-feedback checkpoint; QR repair does not deliver account-bound caching, community or other games."
+    ],
+    "failedEarlierCandidate": {
+      "runtimeRevision": "a01cf1e9291212730bf2ed412f42fdc13a44e2da",
+      "deploymentId": "dep-dao5abnf3r2c73eicom0",
+      "deployed": false,
+      "reason": "Rendered QR decoding failed at125% CSS scaling after363 passing native tests. The build gate rejected it.",
+      "correction": "Changed displayed module pitch to8 pixels and retained the failing assertion and every other scan case. Final source passes them; no acceptance threshold was relaxed."
+    },
+    "externalEffects": ["Updated only owned QR files and test hooks on the existing COTW branch. Application main remains unmerged.", "Reused the existing paid Sway host through normal PR merges. No new service, database, plan, environment variable, provider credential, payment behavior or migration was introduced.", "Live verification used disposable synthetic app/save/journal data, disabled and closed its own test peer, and did not read or publish owner data."],
+    "doNotRepeat": ["Do not suggest the private link as a resolution of the camera defect.", "Do not restart enrollment, hosting, Windows policy changes, the old installer or Desktop Commander checks.", "Do not re-run unchanged363-test/12-case browser gates without a new failure or source change.", "Do not reset the owner's working phone connection merely to deliver this UI update.", "Do not supersede the full-product backlog with this narrow QR slice."],
+    "nextSafeAction": "Provide the current ordinary Windows download. After opening that copy, Settings should expose New connection code and Show larger QR. The owner can scan a fresh code using the phone camera; the QR previously consumed through the link cannot be reused. Preserve the already-working paired session. Use the actual physical-camera result to close or investigate this defect, while continuing source-scoped private cache and full-product work from the preserved product-acceptance checkpoint."
+  },
+  "deployment": {
+    "hostRepository": "infotradescout/sway.tips",
+    "hostRevision": "54aaa61fc91a6c60965bea5f1651ef99be401a0e",
+    "serviceId": "srv-d8iarnldt1ts73f4ia6g",
+    "firstPassingDeploy": "dep-dao5ce2jnfac739da7qg",
+    "liveAcceptanceDeploy": "dep-dao5dpijnfac73al8ssg",
+    "status": "live",
+    "liveBrowserStartedAt": "2026-09-20T21:58:56.029Z",
+    "liveBrowserFinishedAt": "2026-09-20T21:59:09.456Z",
+    "downloadPage": "https://sway-tips.onrender.com/grindzone-download/index.html",
+    "sourceRevision": "52e0d062d994bb4bdc26a7248bd78808c0f0aa7b",
+    "archiveSha256": "4e43d86f10c064190680ef1cae402767071cbf44ffa465d5ed0e79b0f660850d",
+    "physicalCameraVerified": false,
+    "fullProductAccepted": false
+  },
+  "proof": ["tests/phone-qr.test.mjs", "tools/verify-phone-qr.mjs", "tools/verify-phone-connection.mjs", "Render native summary2026-09-20T21:58:41.789Z", "Render live browser report2026-09-20T21:59:09.456653247Z", "Sway PR257 and PR258", "https://sway-tips.onrender.com/grindzone-download/live-phone.json"],
+  "savedFiles": ["public/phone-ui.js", "public/phone.css", "tests/phone-qr.test.mjs", "tools/verify-phone-qr.mjs", "tools/verify-phone-connection.mjs", ".selective-intelligence/progress/qr-camera-repair-20260920.json"],
+  "privacyBoundary": "Public source identities and synthetic proof only. No user screenshots, records, pairing credentials or private device data."
+}

@@ -119,6 +119,9 @@ body.hunting-app {
 .hunting-app .zone-browser-head label { font-size: 12px; letter-spacing: 0; }
 .hunting-app .zone-browser-head input { font-size: 14px; padding: 10px 12px; margin: 7px 0; min-height: 44px; }
 .hunting-app .zone-list { padding: 6px; overflow: auto; min-height: 0; }
+.hunting-app .zone-pinned-note { margin: 6px 8px; color: var(--muted); font-size: 11px; }
+.hunting-app .zone-page-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 6px 6px; }
+.hunting-app .zone-page-controls span { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .hunting-app .zone-card { padding: 13px 11px; border-radius: 6px; }
 .hunting-app .zone-card.selected { border-color: #75967e; background: #293c30; box-shadow: inset 3px 0 0 var(--accent); }
 .hunting-app .zone-title strong { font-size: 14px; line-height: 1.4; }
@@ -242,7 +245,7 @@ body.hunting-app {
   .hunting-app dialog { padding: 20px; max-height: calc(100dvh - 30px); overflow: auto; }
   .hunting-app .form-field { font-size: 13px; }
   .hunting-app .form-field :is(input, select, textarea) { font-size: 16px; }
-  .hunting-app .cards, .hunting-app .career-grid { grid-template-columns: 1fr 1fr; }
+  .hunting-app .cards { grid-template-columns: 1fr 1fr; }
   .hunting-app .career-metric > span { font-size: 12px; }
   .hunting-app .career-metric > small { font-size: 12px; }
   .hunting-app .settings-grid, .hunting-app .grid-two, .hunting-app .herd-layout, .hunting-app .encounter-grid { grid-template-columns: 1fr; }
@@ -452,18 +455,13 @@ body.hunting-app {
 }
 
 /* Saved pressure cells remain beneath interactive map markers. */
-.hunting-app .weapon-stats { display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px; }
 .hunting-app .grind-session { display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;margin-bottom:14px; }
 .hunting-app .grind-session h2 { font-size:17px;margin:0 0 5px; }
 .hunting-app .grind-session p { margin:4px 0; }
 .hunting-app .grind-session > .button { min-height:44px;flex-shrink:0; }
 .hunting-app .grind-count { font-size:26px;font-variant-numeric:tabular-nums; }
 @media (max-width: 1000px) { .hunting-app .mobile-nav { grid-template-columns:repeat(5,minmax(0,1fr)); } }
-.hunting-app .weapon-stats article { padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--panel2); }
-.hunting-app .weapon-stats h3 { margin:0 0 12px;font-size:17px; }
-.hunting-app .weapon-stats article > strong { display:block;font-size:28px; }
-.hunting-app .weapon-stats article > span { font-size:13px; }
-.hunting-app .weapon-stats .kv { margin-top:16px;font-size:13px; }
+
 @media (max-width: 1000px) {
   .hunting-app .hunting-workspace { position: relative; }
   .hunting-app[data-view="map"] #content:not(.native-map-expanded) .hunting-workspace.has-selection[data-workspace-panel="map"] > .map-detail {
@@ -547,4 +545,305 @@ body.hunting-app {
   .hunting-app .route-focus .stop-controls .button { flex: 1 1 auto; min-width: 0; }
   .hunting-app .herd-cards { grid-template-columns: 1fr; gap: 8px; }
   .hunting-app .herd-card { padding: 13px; }
+}
+
+/* A player's starting point: recent activity, the current grind, and the saved route. */
+.hunting-app:is([data-view=home],[data-view=overview]){background:#101713}
+.hunting-app .hunt-dashboard{max-width:1120px;margin:0 auto;font:14px/1.45 system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.hunting-app .dashboard-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
+.hunting-app .dashboard-heading h1{font:650 28px/1.2 system-ui,sans-serif;letter-spacing:-.04em;margin:0}
+.hunting-app .dashboard-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;align-items:start}
+.hunting-app .dashboard-main,.hunting-app .dashboard-side{display:grid;gap:16px;min-width:0}
+.hunting-app .hunt-dashboard section{border:1px solid #354139;border-radius:12px;background:#1a241e;min-width:0;overflow:hidden}
+.hunting-app .hunt-dashboard h2{font:600 17px/1.35 system-ui,sans-serif;letter-spacing:-.02em;margin:0}
+.hunting-app .hunt-dashboard h3{font:600 14px/1.4 system-ui,sans-serif;margin:0}
+.hunting-app .hunt-dashboard svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.hunting-app .dashboard-action{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:9px 13px;border:1px solid #596448;border-radius:7px;background:#253329;color:#e7eee7;font:600 13px/1.35 system-ui,sans-serif;cursor:pointer;touch-action:manipulation}
+.hunting-app .dashboard-action.primary{background:#ed8d3a;border-color:#ed8d3a;color:#211a13}
+.hunting-app .dashboard-action.text{border:0;background:none;color:#ffc28b;padding-inline:4px}
+.hunting-app .dashboard-action:focus-visible{outline:2px solid #ffa758;outline-offset:3px}
+.hunting-app .dashboard-section-top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px}
+.hunting-app .dashboard-meta{display:block;font-size:12px;color:#b5c0b7;line-height:1.5}
+.hunting-app .dashboard-feed{padding:0 18px 6px}
+.hunting-app .dashboard-harvest{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:14px 0;border-top:1px solid #354139}
+.hunting-app .dashboard-activity-icon{display:grid;place-items:center;color:#8f9e92}
+.hunting-app .dashboard-harvest time{display:block;font-size:12px;color:#aebdb2;margin-top:3px}
+.hunting-app .dashboard-score{display:grid;gap:2px;text-align:right}
+.hunting-app .dashboard-score strong{font-size:17px;color:#e3c28f}
+.hunting-app .dashboard-score span{font-size:11px;color:#adbbb0}
+.hunting-app .dashboard-no-activity{padding:6px 18px 20px}
+.hunting-app .dashboard-no-activity p{color:#b6c2b8;margin:5px 0 16px}
+.hunting-app .dashboard-start{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 18px}
+.hunting-app .dashboard-start strong{font-size:14px}
+.hunting-app .dashboard-start span{display:block;font-size:12px;color:#aebdb2;margin-top:3px}
+.hunting-app .dashboard-grind{border-top:2px solid #ee933f!important;background:linear-gradient(130deg,#2a382a,#1a241e 80%)!important}
+.hunting-app .dashboard-kicker{color:#f2b576;font-size:12px;letter-spacing:.09em;font-weight:650}
+.hunting-app .dashboard-live{font-size:12px;color:#c4e1ba;display:flex;align-items:center;gap:6px}
+.hunting-app .dashboard-live:before{content:'';width:6px;height:6px;background:#b2d29d;border-radius:50%}
+.hunting-app .dashboard-grind-main{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:3px 18px 18px}
+.hunting-app .dashboard-grind-main>div:first-child{min-width:0}
+.hunting-app .dashboard-grind-main h2{font-size:22px;overflow-wrap:anywhere;margin-bottom:4px}
+.hunting-app .dashboard-grind-count{display:grid;justify-items:end;flex-shrink:0}
+.hunting-app .dashboard-grind-count strong{font-size:38px;line-height:1.05;font-weight:650;letter-spacing:-.04em}
+.hunting-app .dashboard-grind-count span{font-size:12px;color:#c1cdbd}
+.hunting-app .dashboard-grind-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 18px;background:#111a155e;border-top:1px solid #354139}
+.hunting-app .dashboard-grind-foot>span{font-size:12px;color:#b6c3b8}
+.hunting-app .dashboard-route-preview{padding:0 18px 12px}
+.hunting-app .dashboard-route-stop{display:flex;align-items:center;gap:11px;padding:12px 0;border-top:1px solid #354139}
+.hunting-app .dashboard-stop-number{display:grid;place-items:center;border:1px solid #776846;background:#332f20;border-radius:50%;min-width:28px;height:28px;color:#eec793;font-size:13px}
+.hunting-app .dashboard-route-stop strong{font-size:14px;display:block}
+.hunting-app .dashboard-route-stop>div>span{display:block;font-size:12px;color:#b0bdb2;margin-top:3px}
+.hunting-app .dashboard-route-warning{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 18px;border-top:1px solid #645037;color:#ebc895;font-size:12px;background:#31271b}
+.hunting-app .dashboard-route-empty{padding:0 18px 15px}
+.hunting-app .dashboard-route-empty p{color:#b4c0b6;font-size:13px;margin:0 0 12px}
+.hunting-app .dashboard-route-empty>.text{margin-left:8px}
+.hunting-app .dashboard-career>.dashboard-meta{padding:12px 18px;font-size:12px;border-top:1px solid #354139}
+.hunting-app .dashboard-trophies{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:0 18px 18px;gap:12px}
+.hunting-app .dashboard-trophy{display:grid;gap:3px;border-right:1px solid #354139}
+.hunting-app .dashboard-trophy:last-child{border:0}
+.hunting-app .dashboard-trophy strong{font-size:26px;line-height:1.1;color:#f1ce7c}
+.hunting-app .dashboard-trophy.diamond strong{color:#b6e2ed}
+.hunting-app .dashboard-trophy span{font-size:12px;color:#c2cdc4}
+.hunting-app .route-page{max-width:950px;margin:0 auto}
+.hunting-app .route-page-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px}
+.hunting-app .route-page-heading>span{font-size:13px;color:var(--muted)}
+.hunting-app .route-page .intro{align-items:center}
+.hunting-app .route-page .intro h1{margin:0}
+@media(max-width:700px){
+ .hunting-app .dashboard-layout{grid-template-columns:1fr;gap:16px}
+ .hunting-app .dashboard-heading{margin-bottom:14px}
+ .hunting-app .dashboard-heading h1{font-size:25px}
+ .hunting-app .dashboard-section-top{padding:10px 15px}
+ .hunting-app .dashboard-feed{padding:0 15px 4px}
+ .hunting-app .dashboard-harvest{padding:11px 0;grid-template-columns:22px minmax(0,1fr) auto;gap:8px}
+ .hunting-app .dashboard-grind-main{padding-inline:15px}
+ .hunting-app .dashboard-route-preview{padding:0 15px 8px}
+ .hunting-app .dashboard-route-stop:nth-child(n+2){display:none}
+ .hunting-app .dashboard-route-warning{padding-inline:15px}
+ .hunting-app .dashboard-start{padding:10px 15px}
+ .hunting-app .dashboard-side .dashboard-career{display:none}
+ .hunting-app:is([data-view=home],[data-view=overview],[data-view=harvests]) .topbar{height:64px;min-height:64px}
+}
+
+/* Route reading stays separate from the optional reorder/remove controls. */
+.hunting-app .route-page .intro{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
+.hunting-app .route-page .intro>div{min-width:0}
+.hunting-app .route-page .intro>div>span{display:block;font-size:12px;margin-top:6px}
+.hunting-app .route-page .intro>.button{flex-shrink:0}
+.hunting-app .route-page .route-intro-copy{max-width:560px;margin:7px 0 0;color:var(--muted);font-size:13px}
+.hunting-app .route-page .route-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin:0 0 10px;overflow:hidden;border:1px solid var(--line);border-radius:11px;background:var(--line)}
+.hunting-app .route-page .route-summary>span{display:grid;gap:2px;padding:12px 14px;background:#1b261f}
+.hunting-app .route-page .route-summary strong{font-size:17px;font-weight:650;color:#f2d19a;font-variant-numeric:tabular-nums}
+.hunting-app .route-page .route-summary small{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.hunting-app .route-page .route-focus{padding:12px;border-radius:12px;background:#141d18}
+.hunting-app .route-page .route-stop{display:block;padding:0;margin-bottom:10px;border:1px solid #34433a;border-radius:10px;background:#1a251f;overflow:hidden}
+.hunting-app .route-page .route-stop:last-child{margin-bottom:0}
+.hunting-app .route-page .route-open{display:grid;grid-template-columns:32px minmax(0,1fr) auto;align-items:start;gap:12px;width:100%;min-height:108px;padding:14px;border:0;background:none;color:var(--text);text-align:left;cursor:pointer;font:14px/1.4 system-ui,sans-serif}
+.hunting-app .route-page .route-open:hover{background:#202d25}
+.hunting-app .route-page .route-open:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.hunting-app .route-page .route-stop-copy{display:grid;gap:10px;min-width:0}
+.hunting-app .route-page .route-stop-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hunting-app .route-page .route-stop-heading strong{font-size:16px;overflow-wrap:anywhere}
+.hunting-app .route-page .route-stop-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 18px}
+.hunting-app .route-page .route-stop-facts>span{display:grid;gap:1px;min-width:0}
+.hunting-app .route-page .route-stop-facts small{font-size:10px;color:#91a397;text-transform:uppercase;letter-spacing:.045em}
+.hunting-app .route-page .route-stop-facts b{font-size:12px;font-weight:560;color:#dce6dc;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.hunting-app .route-page .route-coordinates{font-variant-numeric:tabular-nums;letter-spacing:.015em}
+.hunting-app .route-page .route-open-label{display:flex;align-items:center;gap:6px;padding-top:2px;color:#ffc28b;font-size:12px;white-space:nowrap}
+.hunting-app .route-page .route-open .number{width:32px;height:32px;font-size:14px;color:#ebbc79;background:#302b1e;border-color:#665535}
+.hunting-app .route-page .stop-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:6px;padding:9px 12px;border-top:1px solid #34433a;background:#162019}
+.hunting-app .route-page .stop-controls .button{min-height:38px;padding:7px;font-size:11px;min-width:0}
+.hunting-app .route-page .route-stop-missing{margin:8px 0;padding:0 10px}
+.hunting-app .route-page .route-open.missing{cursor:default}
+.hunting-app .route-page .route-stop-missing .stop-controls{padding-left:0}
+@media(max-width:600px){
+ .hunting-app .route-page .route-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .hunting-app .route-page .route-open{grid-template-columns:30px minmax(0,1fr);min-height:0;padding:13px 11px;gap:10px}
+ .hunting-app .route-page .route-open-label{grid-column:2;justify-self:start;padding:2px 0 0}
+ .hunting-app .route-page .route-stop-facts{grid-template-columns:1fr;gap:7px}
+ .hunting-app .route-page .route-focus{padding:8px}
+}
+
+/* One persistent grind, with the controls a hunter needs between runs. */
+.hunting-app[data-view=grinds]{background:#101713}
+.hunting-app .grind-screen{max-width:1120px;margin:auto;font:14px/1.45 system-ui,sans-serif;font-variant-numeric:tabular-nums;color:#f1f5ed}
+.hunting-app .grind-screen *{box-sizing:border-box}
+.hunting-app .grind-screen h1,.hunting-app .grind-screen h2,.hunting-app .grind-screen p{margin:0}
+.hunting-app .grind-screen h1{font-size:27px;line-height:1.25;letter-spacing:-.035em;overflow-wrap:anywhere}
+.hunting-app .grind-screen h2{font-size:17px;line-height:1.35;font-weight:600;letter-spacing:-.02em}
+.hunting-app .grind-page-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.hunting-app .grind-active-switch{margin:0 0 14px;padding:12px;border:1px solid #435747;border-radius:12px;background:#1b2a20}
+.hunting-app .grind-active-switch>strong{display:block;margin-bottom:8px;color:#dbe9d3;font-size:13px}
+.hunting-app .grind-active-switch>div{display:flex;flex-wrap:wrap;gap:8px}
+.hunting-app .grind-active-switch button{display:grid;gap:2px;min-height:44px;padding:8px 12px;border:1px solid #506451;border-radius:9px;background:#243428;color:#f1f5ed;text-align:left;cursor:pointer}
+.hunting-app .grind-active-switch button[aria-current="page"]{border-color:#f2b569;background:#34402a}
+.hunting-app .grind-active-switch button small{color:#bdcdb7}
+.hunting-app .grind-active-switch button:focus-visible{outline:2px solid #ffa758;outline-offset:2px}
+.hunting-app .grind-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;align-items:start}
+.hunting-app .grind-main,.hunting-app .grind-side{display:grid;gap:16px;min-width:0}
+.hunting-app .grind-screen section{border:1px solid #354139;border-radius:12px;background:#1a241e;min-width:0;overflow:hidden}
+.hunting-app .grind-screen svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.hunting-app .grind-action{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:10px 13px;border:1px solid #58664f;border-radius:7px;background:#243027;color:#e8eee6;font:600 13px/1.3 system-ui,sans-serif;cursor:pointer;touch-action:manipulation}
+.hunting-app .grind-action.primary{background:#ed8d3a;border-color:#ed8d3a;color:#211a13}
+.hunting-app .grind-action.text{border:0;background:none;color:#ffc28b;padding-inline:0}
+.hunting-app .grind-action:disabled{opacity:.55;cursor:wait}
+.hunting-app .grind-action:focus-visible,.hunting-app .grind-history-row:focus-visible,.hunting-app .grind-screen summary:focus-visible{outline:2px solid #ffa758;outline-offset:2px}
+.hunting-app .grind-hero{padding:16px 20px 0;background:linear-gradient(125deg,#2d3c2b,#1a241e 80%)!important;border-top:2px solid #ed963f!important}
+.hunting-app .grind-hero-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.hunting-app .grind-hero-top>span:first-child{font-size:11px;letter-spacing:.1em;color:#e9b171;font-weight:650}
+.hunting-app .grind-status{font-size:12px;color:#c1d9b8}
+.hunting-app .grind-status:before{content:'';display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:currentColor;vertical-align:middle}
+.hunting-app .grind-status.paused{color:#e8c377}
+.hunting-app .grind-status.finished{color:#bbc2b6}
+.hunting-app .grind-target{margin:1px 0 8px}
+.hunting-app .grind-target .grind-action{font-size:14px;justify-content:flex-start;gap:8px}
+.hunting-app .grind-total{display:flex;gap:16px;align-items:center;margin-bottom:15px}
+.hunting-app .grind-total>strong{font-size:62px;line-height:1;letter-spacing:-.055em;font-weight:650;overflow-wrap:anywhere}
+.hunting-app .grind-total>div{min-width:0;display:grid;gap:4px}
+.hunting-app .grind-total b{font-size:14px;font-weight:500}
+.hunting-app .grind-total span{font-size:12px;color:#b7c4b4}
+.hunting-app .grind-goal{margin:18px 0}
+.hunting-app .grind-goal>div{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;font-size:12px;color:#c5cfbf}
+.hunting-app .grind-goal progress{display:block;appearance:none;width:100%;height:7px;border:0;border-radius:4px;overflow:hidden;background:#3c4b35;accent-color:#e6ad62}
+.hunting-app .grind-goal progress::-webkit-progress-bar{background:#3c4b35}
+.hunting-app .grind-goal progress::-webkit-progress-value{background:#e6ad62}
+.hunting-app .grind-goal progress::-moz-progress-bar{background:#e6ad62}
+.hunting-app .grind-goal-met{display:block;margin-top:8px;font-size:12px;color:#d5ddb4}
+.hunting-app .grind-add-goal{margin:-8px 0 8px}
+.hunting-app .grind-primary-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
+.hunting-app .grind-other-active{font-size:12px;color:#cec5a6;align-self:center}
+.hunting-app .grind-finish{border-top:1px solid #48513b;text-align:right}
+.hunting-app .grind-finish .grind-action{font-weight:500;color:#c6cdbd;font-size:12px}
+.hunting-app .grind-screen section>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 18px}
+.hunting-app .grind-screen section>header>span{font-size:12px;color:#bbc6b9}
+.hunting-app .grind-result{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;margin:0 18px;border-top:1px solid #354139}
+.hunting-app .grind-result>div{min-width:0;display:grid;gap:3px}
+.hunting-app .grind-result>div:last-child{text-align:right;flex-shrink:0}
+.hunting-app .grind-result strong{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.hunting-app .grind-result b{font-size:17px;font-weight:650;color:#e3c28f}
+.hunting-app .grind-result>div:last-child>span{font-size:12px;color:#aebdad}
+.hunting-app .grind-result .great-one-name{color:#f0c76d;font-size:inherit}
+.hunting-app .grind-result-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;color:#aebdad;font-size:11px}
+.hunting-app .grind-result-kind{font-size:10px;font-weight:650;line-height:1.5;border-radius:3px;padding:1px 5px;background:#354139;color:#d0dacb}
+.hunting-app .grind-result-kind.target{background:#634020;color:#ffd1a2}
+.hunting-app .grind-result-kind.unidentified{background:transparent;border:1px solid #54624f;color:#c3cbbf}
+.hunting-app .grind-activity-filters{display:flex;gap:5px;padding:0 14px 10px}
+.hunting-app .grind-activity-filter{flex:1;min-width:0;min-height:44px;border:1px solid #45513e;border-radius:6px;background:#111b15;color:#cad5c4;font:600 13px/1.3 system-ui,sans-serif;cursor:pointer;padding:7px 4px;touch-action:manipulation}
+.hunting-app .grind-activity-filter span{margin-left:4px;font-size:12px}
+.hunting-app .grind-activity-filter[aria-pressed="true"]{border-color:#ed963f;background:#674025;color:#ffe3cb}
+.hunting-app .grind-activity-status{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 8px;padding:0 18px 9px;color:#b5c4ae;font-size:11px}
+.hunting-app .grind-activity-more{display:block;width:100%;min-height:44px;border:0;border-top:1px solid #354139;background:#223024;color:#efbb85;font:600 13px system-ui,sans-serif;cursor:pointer;touch-action:manipulation}
+.hunting-app .grind-activity-filter:focus-visible,.hunting-app .grind-activity-more:focus-visible{outline:2px solid #ffa758;outline-offset:-3px}
+.hunting-app .grind-screen p.grind-activity-note{padding:0 18px 12px;font-size:11px;color:#b5c4ae}
+.hunting-app .grind-no-results{padding:0 18px 18px;color:#b5c1b2;font-size:13px}
+.hunting-app .grind-screen summary{min-height:44px;padding:12px 18px;font-size:13px;cursor:pointer;color:#e4b57e}
+.hunting-app .grind-results details{border-top:1px solid #354139}
+.hunting-app .grind-stat-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:14px 18px;border-top:1px solid #354139}
+.hunting-app .grind-stat-row>div{display:grid;gap:3px}
+.hunting-app .grind-stat-row>div+div{border-left:1px solid #45503e;padding-left:16px}
+.hunting-app .grind-stat-row strong{font-size:22px;font-weight:650;letter-spacing:-.02em}
+.hunting-app .grind-stat-row span{font-size:12px;color:#b6c2b3}
+.hunting-app .grind-target-hint{padding:0 18px 12px;font-size:12px;color:#c2c5af}
+.hunting-app .grind-time-help{border-top:1px solid #354139}
+.hunting-app .grind-time-help p{padding:0 18px 14px;font-size:12px;color:#bbc6b6;line-height:1.55}
+.hunting-app .grind-hunt-links{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px}
+.hunting-app .grind-hunt-links .grind-map-caption{display:grid;gap:3px;min-width:0}
+.hunting-app .grind-map-caption strong{font-size:14px}
+.hunting-app .grind-map-caption span{font-size:12px;color:#b6c2b3}
+.hunting-app .grind-hunt-links>.grind-action{flex-shrink:0}
+.hunting-app .grind-history summary{font-size:15px;color:#e3e9de}
+.hunting-app .grind-history summary>span{float:right;color:#b4c0ae}
+.hunting-app .grind-history-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 18px;width:100%;min-height:64px;background:none;border:0;border-top:1px solid #354139;color:#e6eee0;text-align:left;cursor:pointer}
+.hunting-app .grind-history-row>span:first-child{display:grid;gap:4px;min-width:0}
+.hunting-app .grind-history-row strong{font-size:14px;overflow-wrap:anywhere}
+.hunting-app .grind-history-row small{font-size:12px;color:#b6c1af}
+.hunting-app .grind-history-row>span:last-child{display:flex;align-items:center;gap:10px}
+.hunting-app .grind-history-row b{font-size:20px}
+.hunting-app .grind-empty{padding:24px}
+.hunting-app .grind-empty p{max-width:470px;color:#b8c7b0;margin:9px 0 20px;line-height:1.6}
+@media(min-width:901px){
+ .hunting-app .grind-layout{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px}
+ .hunting-app .grind-main,.hunting-app .grind-side{display:contents}
+ .hunting-app .grind-hero{grid-column:1;grid-row:1}
+ .hunting-app .grind-results{grid-column:2;grid-row:1 / span 4}
+ .hunting-app .grind-hunt-links{grid-column:1;grid-row:2}
+ .hunting-app .grind-numbers{grid-column:1;grid-row:3}
+ .hunting-app .grind-history{grid-column:1;grid-row:4}
+ .hunting-app .grind-action.new-grind{grid-column:1;grid-row:5}
+}
+.hunting-app .dashboard-live.paused{color:#e8c377}
+.hunting-app .dashboard-live.paused:before{background:currentColor}
+@media(max-width:700px){
+ .hunting-app[data-view=grinds] .topbar{height:64px;min-height:64px}
+ .hunting-app .grind-layout{grid-template-columns:1fr;gap:14px}
+ .hunting-app .grind-main,.hunting-app .grind-side{display:contents}
+ .hunting-app .grind-hero{order:1;padding:14px 15px 0}
+ .hunting-app .grind-numbers{order:3}
+ .hunting-app .grind-hunt-links{order:3}
+ .hunting-app .grind-results{order:2}
+ .hunting-app .grind-history{order:5}
+ .hunting-app .new-grind{order:6}
+ .hunting-app .grind-screen h1{font-size:24px}
+ .hunting-app .grind-total>strong{font-size:54px}
+ .hunting-app .grind-primary-actions .grind-action{padding-inline:7px}
+ .hunting-app .grind-screen section>header{padding:12px 15px}
+ .hunting-app .grind-screen section>header>span{text-align:right}
+ .hunting-app .mobile-more:has([data-view=grinds][aria-current=page])>summary{color:#ffc58e;background:#30291f}
+}
+
+.hunting-app .grind-numbers>details>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 18px 14px}
+.hunting-app .grind-numbers>details>header>span{font-size:12px;color:#bbc6b9}
+@media(max-width:700px){.hunting-app .grind-numbers{order:5}.hunting-app .grind-history{order:6}}
+
+.hunting-app .route-header-actions{display:flex;gap:8px;flex-wrap:wrap}.hunting-app .route-scope{font-size:12px;color:var(--muted);margin:-8px 0 14px}.hunting-app .route-page .route-open{min-height:72px}.hunting-app .spot-original{font-size:12px;color:var(--muted)}
+.hunting-app .route-tabs{display:flex;gap:6px;margin:0 0 14px;border-bottom:1px solid #3e483a;padding-bottom:8px}.hunting-app .route-tabs .button{min-height:44px;border:0;background:transparent;color:#c3cdbb}.hunting-app .route-tabs [aria-pressed=true]{color:#ffbe80;background:#3d3021;border-radius:8px}
+.hunting-app .route-order-settings{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 0 16px}.hunting-app .route-order-settings small{flex-basis:100%;color:var(--muted);font-size:12px}
+.hunting-app .setup-budget{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:16px;margin-bottom:14px;background:#253022;border:1px solid #566344;border-radius:10px}.hunting-app .setup-budget>div{display:grid;gap:4px;min-width:0}.hunting-app .setup-budget strong{font-size:24px;color:#f3c085;overflow-wrap:anywhere}.hunting-app .setup-budget small,.hunting-app .setup-budget>div>span{color:#bfccba;font-size:12px}.hunting-app .setup-budget p{flex-basis:100%;font-size:12px;line-height:1.45;color:#b9c5b4;margin:0}
+.hunting-app .setup-stops{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}.hunting-app .setup-stop{border:1px solid #3e4c3d;background:#1b251e;border-radius:10px;padding:12px;min-width:0}.hunting-app .setup-stop-title{display:flex;gap:9px;align-items:center}.hunting-app .setup-stop-title strong{flex:1;font-size:14px;overflow-wrap:anywhere}.hunting-app .setup-stop .number{min-width:24px;height:24px;border:1px solid #7b6a40;border-radius:50%;display:grid;place-items:center;color:#efb875;font-size:12px}.hunting-app .setup-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}.hunting-app .setup-slots span{display:grid;gap:3px;font-size:11px;color:#b7c2b0}.hunting-app .setup-slots b{font-size:12px;color:#e0e7d8}.hunting-app .setup-slots .needed{color:#e9b378}.hunting-app .setup-warning{padding:12px;font-size:12px;background:#382d21;color:#f2cd94;border-radius:8px}.hunting-app .setup-dialog-grid{display:grid;gap:13px}.hunting-app .setup-dialog-grid>div[hidden]{display:none}.hunting-app .setup-checkbox{display:flex;align-items:center;gap:8px;min-height:44px;font-size:13px}.hunting-app .setup-checkbox input{width:20px;height:20px}.hunting-app .setup-dialog-grid small{font-size:12px;color:var(--muted);line-height:1.5}
+.hunting-app .grind-animal-summary{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:#d3dcca;margin:8px 0}.hunting-app .grind-animal-breakdown{border-top:1px solid #42503d}.hunting-app .grind-animal-breakdown summary{padding:10px 0;font-size:12px;min-height:44px}.hunting-app .grind-animal-list{list-style:none;padding:0;margin:0}.hunting-app .grind-animal-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:13px}.hunting-app .grind-animal-row small{display:block;font-size:11px;color:#b8c5af;margin-top:3px}.hunting-app .grind-animal-help{font-size:12px;line-height:1.5;color:#b8c5af;margin:8px 0 12px}.hunting-app .grind-animal-target{color:#ffd0a0}.hunting-app .grind-hunt-actions{display:flex;gap:6px;flex-wrap:wrap}.hunting-app .grind-hunt-actions .grind-action{min-height:44px}
+@media(max-width:700px){.hunting-app .setup-stops{grid-template-columns:1fr}.hunting-app .setup-budget{padding:13px}.hunting-app .setup-budget strong{font-size:22px}.hunting-app .grind-hunt-links{flex-wrap:wrap}.hunting-app .grind-hunt-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}}
+.hunting-app .map-route-summary{position:absolute;z-index:4;bottom:142px;left:12px;right:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:#20291df2;border:1px solid #986438;border-radius:9px;box-shadow:0 3px 14px #0004}
+.hunting-app .map-route-summary[hidden]{display:none}.hunting-app .map-route-summary>div{display:grid;gap:3px;min-width:0}.hunting-app .map-route-summary strong{font-size:13px;color:#ffd0a0}.hunting-app .map-route-summary span{font-size:11px;color:#c0cbb7}.hunting-app .map-route-summary .button{min-height:44px;flex-shrink:0;font-size:12px}
+@media(min-width:901px){.hunting-app .map-route-summary{left:330px;right:auto;min-width:280px;bottom:85px}}
+.hunting-app .native-map-expanded .map-route-summary{bottom:106px;left:20px;right:auto;max-width:calc(100% - 40px)}
+@media(max-width:380px){.hunting-app .route-page .intro{display:grid;gap:12px}.hunting-app .route-header-actions .button{flex:1}.hunting-app .map-route-summary{padding:7px 8px}.hunting-app .map-route-summary span{font-size:10px}}
+
+@media (min-width:901px) and (height > 500px), (width > 1000px){
+ .hunting-app[data-view=map] .main-shell{height:100dvh;display:flex;flex-direction:column;min-height:0}
+ .hunting-app[data-view=map] .topbar{flex:0 0 auto}
+ .hunting-app[data-view=map] .page-foot,.hunting-app[data-view=map] .hunt-heading,.hunting-app[data-view=map] .hunt-summary{display:none}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded){flex:1 1 0;min-height:0;display:flex;flex-direction:column;padding:14px 20px 10px}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded)>#huntNotice{flex:0 0 auto;max-height:20dvh;overflow-y:auto}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded)>.hunt-filters{flex:0 0 auto;margin:0 0 12px}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded)>.hunting-workspace{flex:1 1 0;min-height:0}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded) .map-column{min-height:0}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded) .map-shell{flex:1 1 0;min-height:0}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded) .field-map{height:100%;min-height:0}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded) .hunting-workspace>:is(.zone-browser,.map-detail){height:100%;max-height:none}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded) .map-route-summary{position:static;order:2;flex:0 0 auto;left:auto;right:auto;bottom:auto;min-width:0;margin-top:6px}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded) .map-shell{order:1}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded) .native-terrain-status{order:3}
+ .hunting-app[data-view=map] #content:not(.native-map-expanded) .map-credit{order:4}
+}
+
+
+/* Phone grind loop: one action bar, never covered by the global navigation. */
+.hunting-app .grind-phone-dock{display:none}
+@media(max-width:700px){
+ .hunting-app[data-view=grinds]:has(.grind-phone-dock) > .mobile-nav{display:none}
+ .hunting-app .grind-screen{padding-bottom:88px}
+ .hunting-app .grind-page-heading{display:none}
+ .hunting-app .grind-hero{padding-top:12px}
+ .hunting-app .grind-hero-top{margin-bottom:8px}
+ .hunting-app .grind-target{margin-bottom:3px}
+ .hunting-app .grind-total{margin-bottom:8px}
+ .hunting-app .grind-total>strong{font-size:48px}
+ .hunting-app .grind-animal-summary{display:none}
+ .hunting-app .grind-animal-breakdown{border-top:0}
+ .hunting-app .grind-animal-breakdown summary{min-height:38px;padding:7px 0}
+ .hunting-app .grind-goal{margin:10px 0 8px}
+ .hunting-app .grind-primary-actions{display:none}
+ .hunting-app .grind-phone-dock{position:fixed;z-index:100;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));padding:7px;border:1px solid #56634f;border-radius:12px;background:#111a14f2;box-shadow:0 8px 28px #0009;backdrop-filter:blur(10px)}
+ .hunting-app .grind-phone-dock .grind-action{width:100%;min-height:50px;padding:7px 5px;font-size:12px}
+ .hunting-app .grind-phone-locked{display:grid;place-items:center;min-height:50px;padding:5px;text-align:center;border:1px solid #4a5547;border-radius:7px;color:#b8c1b5;font-size:11px;line-height:1.25}
 }

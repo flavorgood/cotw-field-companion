@@ -1,0 +1,100 @@
+/** Real PC and paired-phone dashboard against disposable binary saves. No player data or production accounts. */
+import assert from 'node:assert/strict';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,unlinkSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {randomBytes} from 'node:crypto';
+import {createRequire} from 'node:module';
+import {execFileSync} from 'node:child_process';
+import {createApp} from '../server.mjs';
+import {createActivatedPhoneRelay} from '../cloud/activation-server.mjs';
+import {readyDiscoveryReader} from '../tests/zone-discovery-fixture.mjs';
+import {writeSaveDataFixture,writeProfile,saveHashes} from '../tests/save-data-workflow-fixture.mjs';
+const hostRoot=path.resolve(process.argv[2]||'.'),mode=process.argv[3]||'local',output=path.resolve(process.argv[4]||'phone-acceptance');
+assert.ok(['local','live'].includes(mode));
+const require=createRequire(path.join(hostRoot,'package.json')),{chromium}=require('playwright');
+const root=mkdtempSync(path.join(tmpdir(),'grindzone-save-data-browser-')),save=path.join(root,'save');mkdirSync(save);
+let expected=writeSaveDataFixture(save),app,relay,browser;
+const secrets=[],errors=[],assetErrors=[];
+const proof={at:new Date().toISOString(),source:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),mode,passed:false,checks:[],viewports:[],physicalPhoneVerified:false,windowsLaunchVerified:false,realPlayerSaveVerified:false,fixture:'Actual app, binary decoder, SQLite, authenticated relay and Chromium; synthetic game saves and reference areas'};
+const until=async(fn,label)=>{for(let i=0;i<180;i++){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw Error('Timed out: '+label);};
+const details=(page,key)=>page.locator(`[data-disclosure-key="save-data:${key}"]`);
+const open=async(page,key)=>{const element=details(page,key);await element.waitFor();if(!await element.evaluate(e=>e.open))await element.locator(':scope > summary').click();};
+const readState=(page,reserve=19)=>page.evaluate(async reserve=>{const response=await fetch(new URL('api/state?reserve='+reserve,location.href),{cache:'no-store'});if(!response.ok)throw Error('State HTTP '+response.status);return response.json();},reserve);
+const observe=page=>{page.on('pageerror',error=>errors.push(error.message));page.on('response',r=>{if(/\/save-data\.(js|css)(?:\?|$)/.test(r.url())&&r.status()!==200)assetErrors.push({status:r.status(),path:new URL(r.url()).pathname});});};
+async function start(base){
+  const created=await createApp({dataDir:path.join(root,'journal'),saveDir:save,port:0,interval:250,phoneRelayUrl:base,phoneEnrollmentToken:null,allowInsecurePhoneLoopback:mode==='local',feedbackUrl:null,feedbackOwnerToken:null,feedbackOwnerOrigin:null,githubFeedbackUrl:null});
+  created.observer.zoneReference.close();created.observer.zoneReference=readyDiscoveryReader();return created;
+}
+try{
+  if(mode==='local')relay=await createActivatedPhoneRelay({key:randomBytes(32),publicOrigin:'http://127.0.0.1:0/grindzone',allowInsecureLoopback:true});
+  const base=relay?.origin||'https://sway-tips.onrender.com/grindzone';proof.relay=base;
+  assert.equal((await fetch(base+'/api/state')).status,401);
+  app=await start(base);
+  browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+  const pcContext=await browser.newContext({viewport:{width:1440,height:1000},locale:'en-US',serviceWorkers:'block'}),pc=await pcContext.newPage();observe(pc);
+  await pc.goto(app.url+'/#home',{waitUntil:'domcontentloaded'});await pc.locator('[data-save-data]').waitFor();
+  await open(pc,'progress');assert.match(await details(pc,'progress').innerText(),/18,750/);
+  const initial=await readState(pc);assert.equal(initial.career.saveData.profile.level,42);assert.equal(initial.career.saveData.equipment.total,2);
+  assert.equal(initial.career.saveData.herds.status,'spoilers_off');assert.deepEqual(saveHashes(save),expected);
+  proof.checks.push('Desktop loads the real dashboard module graph and renders decoded profile, uncollected counter and equipment totals without modifying save bytes');
+  await pc.goto(app.url+'/#settings',{waitUntil:'domcontentloaded'});
+  await pc.locator('[data-action="phone-enable"]').click();await pc.locator('#modal input[name="consent"]').check();await pc.locator('#submitDialog').click();
+  await pc.locator('[data-phone-link]').waitFor({timeout:30000});const link=await pc.locator('[data-phone-link]').inputValue();secrets.push(new URL(link).hash.slice(6));
+  const phoneContext=await browser.newContext({viewport:{width:390,height:844},locale:'en-US',isMobile:true,hasTouch:true,serviceWorkers:'block'}),phone=await phoneContext.newPage();observe(phone);
+  await phone.goto(link,{waitUntil:'domcontentloaded'});await phone.locator('#pair').click();await phone.waitForURL(url=>url.hash==='#map');
+  await phone.goto(base+'/#home',{waitUntil:'domcontentloaded'});await phone.locator('[data-save-data]').waitFor();await open(phone,'progress');
+  assert.match(await details(phone,'progress').innerText(),/18,750/);
+  let state=await readState(phone);assert.equal(state.career.saveData.profile.cash,18750);assert.equal(state.career.saveData.equipment.total,2);
+  await pc.locator('#spoilerSetting').click();await pc.locator('#modal input[name="consent"]').check();await pc.locator('#submitDialog').click();
+  await until(async()=>{state=await readState(phone);return state.career.saveData.herds.species?.[0]?.animals===2;},'phone herd composition');
+  await open(phone,'herds');await open(phone,'species:3845994887');
+  assert.match(await details(phone,'herds').innerText(),/2 saved animals/);assert.equal(state.career.saveData.herds.species[0].males,1);assert.equal(state.career.saveData.herds.species[0].females,1);
+  await open(phone,'equipment');await open(phone,'item:equipment:19:1001:0');
+  assert.match(await details(phone,'equipment').innerText(),/Bait empty/);
+  for(const width of [390,320]){
+    await phone.setViewportSize({width,height:844});
+    const layout=await phone.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,sectionWidth:document.querySelector('[data-save-data]').getBoundingClientRect().width}));
+    assert.ok(layout.scrollWidth<=layout.width+1,'Saved-game dashboard overflows '+width+'px viewport');proof.viewports.push(layout);
+  }
+  await phone.setViewportSize({width:390,height:844});
+  const mapButton=phone.locator('[data-save-data] [data-career-reserve="19"]').first();await mapButton.click();
+  await phone.waitForURL(url=>url.hash==='#map');await phone.locator('#fieldMap').waitFor();assert.equal((await readState(phone)).selectedReserve,19);
+  await phone.goto(base+'/#home',{waitUntil:'domcontentloaded'});await open(phone,'progress');
+  proof.checks.push('Real pairing exposes the same permitted save data; spoiler consent reveals non-duplicated male/female herd counts; equipment links open the correct reserve; expanded layouts fit 390px and 320px');
+  writeProfile(save,{cash:18950,savedAt:'2026-09-20T10:01:00.000Z'});expected=saveHashes(save);
+  await until(async()=>{state=await readState(phone);return state.career.saveData.profile.cash===18950;},'automatic binary-save update');
+  await until(async()=>/18,950/.test(await details(phone,'progress').innerText()),'rendered saved progression');
+  assert.equal(state.career.saveData.progression.events.length,1);assert.equal(state.career.saveData.progression.events[0].changes[0].delta,200);
+  assert.equal(await details(phone,'progress').evaluate(element=>element.open),true,'Refresh must preserve the open details');
+  const historyBefore=structuredClone(state.career.saveData.progression.events),journalBefore=app.store.harvests(app.observer.profile).length;
+  writeFileSync(path.join(save,'thp_player_profile_adf'),Buffer.from('broken fixture save'));expected=saveHashes(save);
+  await until(async()=>{state=await readState(phone);return state.career.saveData.profile.status==='stale';},'stale profile state');
+  assert.equal(state.career.saveData.profile.cash,18950);assert.deepEqual(state.career.saveData.progression.events,historyBefore);
+  await until(async()=>/last retained save/.test(await details(phone,'progress').innerText()),'visible retained-save warning');
+  unlinkSync(path.join(save,'thp_player_profile_adf'));expected=saveHashes(save);
+  await until(async()=>app.store.sources(app.observer.profile).some(row=>row.name==='thp_player_profile_adf'&&row.status==='missing'),'missing profile source');
+  assert.deepEqual((await readState(phone)).career.saveData.progression.events,historyBefore);
+  writeProfile(save,{cash:18950,savedAt:'2026-09-20T10:01:00.000Z'});expected=saveHashes(save);
+  await until(async()=>{state=await readState(phone);return state.career.saveData.profile.status==='available';},'profile recovery');
+  assert.deepEqual(state.career.saveData.progression.events,historyBefore);
+  proof.checks.push('A real save write updates the open phone panel; corrupt/missing files retain values and history with visible stale labels; recovery does not duplicate progression');
+  await pc.locator('#spoilerSetting').uncheck();
+  await until(async()=>{state=await readState(phone);return state.settings.spoilers===false&&state.career.saveData.herds.status==='spoilers_off';},'spoiler revocation');
+  await until(async()=>!await phone.locator('[data-disclosure-key="save-data:species:3845994887"]').count(),'removed population detail');
+  assert.deepEqual(state.career.saveData.herds.species,[]);assert.equal(state.career.saveData.coverage.find(row=>row.key==='population').status,'spoilers_off');
+  await app.close();app=null;
+  await until(async()=>await phone.evaluate(async()=> (await fetch(new URL('api/state?reserve=19',location.href),{cache:'no-store'})).status)===503,'PC disconnected');
+  app=await start(base);
+  await until(async()=>{try{state=await readState(phone);return state.career?.saveData?.profile?.cash===18950;}catch{return false;}},'existing phone reconnects after app restart');
+  await phone.reload({waitUntil:'domcontentloaded'});await phone.locator('[data-save-data]').waitFor();await open(phone,'progress');
+  assert.deepEqual((await readState(phone)).career.saveData.progression.events,historyBefore);assert.equal(app.store.harvests(app.observer.profile).length,journalBefore);
+  assert.deepEqual(saveHashes(save),expected);
+  proof.checks.push('Spoilers-off removes population detail and coverage; the same phone reconnects after real app/SQLite restart with identical progression and journal history and unchanged game bytes');
+  mkdirSync(output,{recursive:true});await phone.locator('[data-save-data]').scrollIntoViewIfNeeded();await phone.screenshot({path:path.join(output,mode+'-save-data.png'),fullPage:false});
+  assert.deepEqual(errors,[]);assert.deepEqual(assetErrors,[]);assert.equal((await fetch(base+'/api/state')).status,401);proof.passed=true;
+}catch(error){let message=String(error.stack||error);for(const secret of secrets)message=message.split(secret).join('[redacted]');proof.error=message.replace(/pair=[A-Za-z0-9_-]{43}/g,'pair=[redacted]');process.exitCode=1;}
+finally{
+  await browser?.close();await app?.close().catch(()=>{});await relay?.close();rmSync(root,{recursive:true,force:true});
+  proof.finishedAt=new Date().toISOString();mkdirSync(output,{recursive:true});writeFileSync(path.join(output,mode+'-save-data.json'),JSON.stringify(proof,null,2));console.log('GRINDZONE_SAVE_DATA_WORKFLOW '+JSON.stringify(proof));
+}

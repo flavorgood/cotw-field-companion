@@ -149,8 +149,31 @@ test('phone projection excludes raw identities, paths, errors, health, hashes an
 });
 
 test('cloud export is an explicit projected view and never a raw PC export',async t=>{
-  const f=await fixture(t),pc=await f.pc(),p=await pair(f.relay,pc);const exported=await request(f.relay,'/api/export?reserve=19',{cookie:p.cookie});
-  assert.equal(exported.status,200);assert.equal(exported.value.format,'cotw-phone-view');assert.match(exported.value.scope,/Current reserve/);assert.doesNotMatch(JSON.stringify(exported.value),/PRIVATE_/);
+   const f=await fixture(t),pc=await f.pc(),p=await pair(f.relay,pc);const exported=await request(f.relay,'/api/export?reserve=19',{cookie:p.cookie});
+   assert.equal(exported.status,200);assert.equal(exported.value.format,'cotw-phone-view');assert.match(exported.value.scope,/Current reserve/);assert.doesNotMatch(JSON.stringify(exported.value),/PRIVATE_/);
+ });
+
+test('paired Hunt state forwards only a validated species while full state and export stay complete',async t=>{
+ const f=await fixture(t),reads=[];
+ const pc=await f.pc('Mallard',{readState:(reserve,options)=>{
+  reads.push({reserve,options});const value=state('Mallard');
+  if(options){value.huntSpeciesOptions=['Mallard','Whitetail Deer'];value.zones=options.huntSpecies==='all'?[]:value.zones;}
+  return value;
+ }}),p=await pair(f.relay,pc);
+ const full=await request(f.relay,'/api/state?reserve=19',{cookie:p.cookie});assert.equal(full.status,200);assert.equal(full.value.zones.length,1);assert.equal(full.value.huntSpeciesOptions,undefined);
+ const choose=await request(f.relay,'/api/state?reserve=19&huntSpecies=Mallard',{cookie:p.cookie});assert.equal(choose.status,200);assert.equal(choose.value.zones[0].species,'Mallard');assert.deepEqual(choose.value.huntSpeciesOptions,['Mallard','Whitetail Deer']);
+ const defaultHunt=await request(f.relay,'/api/state?reserve=19&huntSpecies=all',{cookie:p.cookie});assert.equal(defaultHunt.status,200);assert.equal(defaultHunt.value.zones.length,0);
+ const exported=await request(f.relay,'/api/export?reserve=19&huntSpecies=all',{cookie:p.cookie});assert.equal(exported.status,200);assert.equal(exported.value.zones.length,1);
+ assert.deepEqual(reads.map(r=>r.options?.huntSpecies??null),[null,'Mallard','all',null]);
+ const before=reads.length;
+ for(const query of ['&huntSpecies=','&huntSpecies=all&huntSpecies=Mallard','&huntSpecies='+encodeURIComponent('x'.repeat(121)),'&huntSpecies=%00'])assert.equal((await request(f.relay,'/api/state?reserve=19'+query,{cookie:p.cookie})).status,400);
+ assert.equal(reads.length,before,'invalid scopes never reach the PC');
+});
+test('an older paired PC can ignore a Hunt scope without losing its phone session',async t=>{
+ const f=await fixture(t),pc=await f.pc('Old PC'),p=await pair(f.relay,pc);
+ const scoped=await request(f.relay,'/api/state?reserve=19&huntSpecies=all',{cookie:p.cookie});
+ assert.equal(scoped.status,200);assert.equal(scoped.value.zones[0].species,'Old PC');
+ assert.equal((await request(f.relay,'/api/state?reserve=19',{cookie:p.cookie})).status,200);
 });
 
 test('body, schema and provisioning caps reject before journal mutation',async t=>{

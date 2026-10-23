@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "grindzone.download-evidence.v1",
+  "observedAt": "2026-09-20T18:09:48.173153+00:00",
+  "sourceRevision": "5974923b6a87666c87af34742df96bbe0bdef18c",
+  "hostRevision": "a34b323dbca17e9ee55bc7d06ac804877ee91212",
+  "hostPullRequest": 253,
+  "relayRevisionUnchanged": "58ceb46de0ab10463dcdd7187985d91d8b4bf45a",
+  "serviceId": "srv-d8iarnldt1ts73f4ia6g",
+  "deployment": "dep-dao20hnavr4c73arsvmg",
+  "deploymentStatus": "live",
+  "deploymentFinishedAt": "2026-09-20T18:06:17.049651Z",
+  "localVerification": {"environment":"Linux Node22.16 source subset","packagingTests":10,"hostTests":2,"fail":0,"skipped":0,"independentPythonZipCompatibility":true},
+  "hostedVerification": {"environment":"Existing Render Linux build","summaryAt":"2026-09-20T18:05:30.636737444Z","tests":325,"pass":325,"fail":0,"cancelled":0,"skipped":0,"durationMs":10485.822725,"nodeVersionNotRetrieved":true},
+  "download": {
+    "filename":"GrindZone-Windows-x64.zip",
+    "bytes":36241548,
+    "sha256":"4c9adf8c9cdd9c2583a729ed609a58a81169678a6b794b03c11c04572d511494",
+    "files":59,
+    "runtimeVersion":"24.21.0",
+    "runtimeSha256":"ba4e6d110e8c1592a1ecd390f6b05f3da124b13871a5be62b341a07a853c6c32",
+    "page":"https://sway-tips.onrender.com/grindzone-download/index.html",
+    "url":"https://sway-tips.onrender.com/grindzone-download/GrindZone-Windows-x64.zip",
+    "playerDataIncluded":false,
+    "privateEnrollmentIncluded":false
+  },
+  "sourceBlobMatches": {
+    "builder":"39a381d8a705d5434f42a240ad548b0a4538deb4",
+    "starter":"bf1c0756719bde1a24cd7f11d40d6bedec5e8fef",
+    "phoneConfiguration":"f482308abb3643df734fa2ba569e0db2976ab669",
+    "hostPreparation":"19fed5537696d5ad384b8f0b5e358b8794581558"
+  },
+  "newServices":0,
+  "planChanged":false,
+  "desktopCommanderCalls":0,
+  "pcAccessed":false,
+  "pcInstallationPerformed":false,
+  "credentialsUsedOrPublished":false,
+  "windowsLaunchVerified":false,
+  "phonePaired":false,
+  "publicHttpIndependentlyVerified":false,
+  "limits":[
+    "Provider reports this exact deployment live and its build produced the verified archive. The external HTTP inspection tool could not retrieve the new public URLs; no HTTP status or rendered-browser success is inferred from that tool failure.",
+    "The package is an ordinary public portable preview, not a repackaged remote installer. It does not stop or replace another PC copy, rewrite policy, persist an enrollment permit, or touch the player's machine during its build.",
+    "Private phone enrollment is not included in the download and remains unfinished. Windows launch and physical-phone acceptance are not established by Linux tests or deployment status."
+  ]
+}

@@ -1,4 +1,6 @@
 node_modules/
+/node_modules
+/public/vendor/ocr/
 dist/
 .data/
 data/
@@ -10,3 +12,6 @@ data/
 *.png
 *.jpg
 *.zip
+lib/herd-reference.json
+desktop/bin/
+desktop/obj/

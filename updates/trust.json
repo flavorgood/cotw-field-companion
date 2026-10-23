@@ -1,0 +1,7 @@
+{
+  "schema": "grindzone.update-trust.v1",
+  "updateUrl": "https://sway-tips.onrender.com/grindzone-download/updates/latest.json",
+  "keys": {
+    "grindzone-release-20260923": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAEdnS2uCtwaPTU2da6RdnWVCsBJDZ/KKt+ZWlb5ue+5g=\n-----END PUBLIC KEY-----\n"
+  }
+}

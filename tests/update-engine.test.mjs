@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {generateKeyPairSync,sign} from 'node:crypto';
+import * as fs from 'node:fs';
+import path from 'node:path';
+import {tmpdir} from 'node:os';
+import {spawn} from 'node:child_process';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import * as E from '../updates/engine.mjs';
+const keys=generateKeyPairSync('ed25519'),trust={keys:{test:keys.publicKey.export({format:'pem',type:'spki'})},updateUrl:'https://updates.example.test/latest.json'},revision=n=>n.toString(16).padStart(40,'0');
+function make(n,overrides={},members){
+ const entries=members||new Map([['package.json',Buffer.from('{"version":"0.4.1"}')],['server.mjs',Buffer.from('// synthetic '+n)],['launcher.mjs',Buffer.from('// synthetic')],['runtime/node.exe',Buffer.from('MZ synthetic executable; never run')]]);
+ const bundle=E.encodeBundle(entries),manifest={schema:'grindzone.update-manifest.v1',product:'GrindZone',channel:'stable',platform:'win32-x64',protocol:1,sequence:n,revision:revision(n),runtimeFingerprint:'a'.repeat(64),storageContract:'b'.repeat(64),journalEpoch:1,publishedAt:'2026-09-23T00:00:00Z',expiresAt:'2027-09-23T00:00:00Z',bundle:{name:`payload-${E.digest(bundle)}.gz`,bytes:bundle.length,sha256:E.digest(bundle)},files:[...entries].map(([path,bytes])=>({path,bytes:bytes.length,sha256:E.digest(bytes)})),...overrides};
+ const payload=Buffer.from(E.canonical(manifest)),envelope={schema:'grindzone.signed-release.v1',keyId:'test',payload:payload.toString('base64'),signature:sign(null,payload,keys.privateKey).toString('base64')};return {manifest,envelope,bundle,entries};
+}
+function fixture(t){const root=fs.mkdtempSync(path.join(tmpdir(),'gz-update-')),home=path.join(root,'app'),data=path.join(root,'data');fs.mkdirSync(home);fs.mkdirSync(data);t.after(()=>fs.rmSync(root,{force:true,recursive:true}));return {root,home,data};}
+function seed(home,n=1){const r=make(n);E.stageEntries(home,r.envelope,trust,r.entries);E.saveState(home,{...E.loadState(home),current:r.manifest.revision,highWater:n});return r;}
+function fetcher(r,options={}){return async(url,opts)=>{assert.equal(opts.redirect,'error');assert.equal(opts.credentials,'omit');if(options.error)throw Error(options.error);return new Response(url.endsWith('latest.json')?JSON.stringify(r.envelope):r.bundle,{status:options.status||200});};}
+test('signed manifest and deterministic binary capsule round-trip',()=>{const r=make(1);assert.deepEqual(E.signedManifest(r.envelope,trust),r.manifest);assert.deepEqual(E.decodeBundle(r.bundle,r.manifest),r.entries);assert.deepEqual(E.encodeBundle(r.entries),r.bundle);});
+for(const field of ['payload','signature','keyId'])test('signature rejects altered '+field,()=>{const r=make(1);assert.throws(()=>E.signedManifest({...r.envelope,[field]:'not-trusted'},trust));});
+test('expired metadata is rejected for downloads but installed offline use remains valid',()=>{const r=make(1,{expiresAt:'2026-09-23T01:00:00Z'});assert.throws(()=>E.signedManifest(r.envelope,trust,{network:true,now:Date.parse('2026-09-24')}),/expired/);assert.deepEqual(E.signedManifest(r.envelope,trust),r.manifest);});
+for(const patch of [{platform:'linux-x64'},{protocol:2},{journalEpoch:2},{sequence:0},{revision:'../../bad'}])test('reject incompatible manifest '+JSON.stringify(patch),()=>assert.throws(()=>E.signedManifest(make(2,patch).envelope,trust)));
+for(const p of ['../x','/x','C:/x','lib\\x','lib/CON.json','lib/a.','a//b','a/../b','.env'])test('unsafe path/private file is rejected: '+p,()=>{const r=make(1);r.manifest.files[0].path=p;assert.throws(()=>E.validateManifest(r.manifest));});
+test('case-folded duplicate names cannot overwrite Windows files',()=>{const r=make(1);r.manifest.files.push({...r.manifest.files[1],path:'SERVER.mjs'});assert.throws(()=>E.validateManifest(r.manifest),/duplicate/);});
+test('wrong checksum and truncated bundles never unpack',()=>{const r=make(1);assert.throws(()=>E.decodeBundle(r.bundle.subarray(0,-1),r.manifest),/checksum/);const bad=Buffer.from(r.bundle);bad[bad.length-1]^=1;assert.throws(()=>E.decodeBundle(bad,r.manifest));});
+test('signed file content mismatch refuses staging without touching installed version',t=>{const {home}=fixture(t);seed(home);const r=make(2);r.entries.set('server.mjs',Buffer.from('bad'));assert.throws(()=>E.stageEntries(home,r.envelope,trust,r.entries),/checksum|signature/);assert.equal(E.loadState(home).current,revision(1));assert.deepEqual(fs.readdirSync(path.join(home,'releases')),[revision(1)]);});
+test('staging is idempotent and never replaces a same-revision different payload',t=>{const {home}=fixture(t),r=seed(home);assert.deepEqual(E.stageEntries(home,r.envelope,trust,r.entries),r.manifest);const different=make(1,{runtimeFingerprint:'c'.repeat(64)});assert.throws(()=>E.stageEntries(home,different.envelope,trust,different.entries),/reused/);});
+test('network failure leaves working release and journal unchanged',async t=>{const {home,data}=fixture(t);seed(home);fs.writeFileSync(path.join(data,'journal.sqlite'),'journal');const r=await E.checkAndStage(home,trust,{fetcher:fetcher(make(2),{error:'offline'})});assert.equal(r.status,'unavailable');assert.equal(E.loadState(home).current,revision(1));assert.equal(fs.readFileSync(path.join(data,'journal.sqlite'),'utf8'),'journal');});
+test('valid update stages but does not activate during an active app',async t=>{const {home}=fixture(t);seed(home);const r=await E.checkAndStage(home,trust,{fetcher:fetcher(make(2))});assert.equal(r.status,'staged');const s=E.loadState(home);assert.equal(s.current,revision(1));assert.equal(s.staged,revision(2));assert.equal(s.highWater,2);});
+test('same revision and sequence reports current without downloading a bundle',async t=>{const {home}=fixture(t),r=seed(home);let requests=0;const result=await E.checkAndStage(home,trust,{fetcher:async(...args)=>{requests++;return fetcher(r)(...args);}});assert.equal(result.status,'current');assert.equal(requests,1);});
+test('downgrade and same-sequence equivocation are rejected',async t=>{const {home}=fixture(t);seed(home,3);for(const r of [make(2),make(4,{sequence:3})])assert.equal((await E.checkAndStage(home,trust,{fetcher:fetcher(r)})).status,'unavailable');assert.equal(E.loadState(home).current,revision(3));});
+test('changed storage code cannot be automatically applied',async t=>{const {home}=fixture(t);seed(home);assert.equal((await E.checkAndStage(home,trust,{fetcher:fetcher(make(2,{storageContract:'c'.repeat(64)}))})).status,'unavailable');assert.equal(E.loadState(home).staged,null);});
+test('crash before activation commit restores exact DB/WAL/SHM and pairing without erasing other files',async t=>{
+ const {home,data}=fixture(t);seed(home);const originals={'journal.sqlite':'journal, harvests, pairing token','journal.sqlite-wal':'uncheckpointed private data','journal.sqlite-shm':'shared metadata'};
+ for(const [n,b]of Object.entries(originals))fs.writeFileSync(path.join(data,n),b);fs.writeFileSync(path.join(data,'notes.txt'),'keep');
+ await E.checkAndStage(home,trust,{fetcher:fetcher(make(2))});E.beginActivation(home,data,trust);
+ fs.writeFileSync(path.join(data,'journal.sqlite'),'bad candidate');fs.rmSync(path.join(data,'journal.sqlite-wal'));
+ assert.equal(E.recoverActivation(home,data),true);for(const [n,b]of Object.entries(originals))assert.equal(fs.readFileSync(path.join(data,n),'utf8'),b);
+ assert.equal(fs.readFileSync(path.join(data,'notes.txt'),'utf8'),'keep');const s=E.loadState(home);assert.equal(s.current,revision(1));assert.equal(s.highWater,2);assert.deepEqual(s.rejected,[revision(2)]);
+ assert.equal((await E.checkAndStage(home,trust,{fetcher:fetcher(make(2))})).status,'unavailable');
+});
+test('commit keeps candidate, preserves journal, and never restores an old backup after writes resume',async t=>{
+ const {home,data}=fixture(t);seed(home);fs.writeFileSync(path.join(data,'journal.sqlite'),'old');await E.checkAndStage(home,trust,{fetcher:fetcher(make(2))});E.beginActivation(home,data,trust);E.commitActivation(home);fs.writeFileSync(path.join(data,'journal.sqlite'),'new player report');assert.equal(E.recoverActivation(home,data),false);assert.equal(E.loadState(home).current,revision(2));assert.equal(fs.readFileSync(path.join(data,'journal.sqlite'),'utf8'),'new player report');
+});
+test('crash in committed phase never rewinds player data',async t=>{const {home,data}=fixture(t);seed(home);await E.checkAndStage(home,trust,{fetcher:fetcher(make(2))});E.beginActivation(home,data,trust);const s=E.loadState(home);s.current=revision(2);s.pending.phase='committed';E.saveState(home,s);fs.writeFileSync(path.join(data,'journal.sqlite'),'new');E.recoverActivation(home,data);assert.equal(fs.readFileSync(path.join(data,'journal.sqlite'),'utf8'),'new');assert.equal(E.loadState(home).current,revision(2));});
+test('tampered recovery backup refuses restoration without touching the live journal',t=>{const {home,data}=fixture(t);fs.writeFileSync(path.join(data,'journal.sqlite'),'good');const name=E.snapshotJournal(home,data);fs.writeFileSync(path.join(home,'backups',name,'journal.sqlite'),'bad');assert.throws(()=>E.restoreJournal(home,data,name),/integrity/);assert.equal(fs.readFileSync(path.join(data,'journal.sqlite'),'utf8'),'good');});
+test('backup from another journal cannot be restored',t=>{const {home,data,root}=fixture(t);const name=E.snapshotJournal(home,data),other=path.join(root,'other');fs.mkdirSync(other);assert.throws(()=>E.restoreJournal(home,other,name),/another journal/);});
+test('install directory overlap with journal is rejected',t=>{const {home}=fixture(t);assert.throws(()=>E.snapshotJournal(home,path.join(home,'data')),/separate/);});
+test('symlink staging and recovery paths are rejected',t=>{const {home,data,root}=fixture(t);fs.symlinkSync(data,path.join(home,'releases'),'junction');assert.throws(()=>seed(home),/links|junctions/);});
+test('exclusive install lock rejects concurrent processes and recovers automatically after crash',async t=>{
+ const {home}=fixture(t),engine=fileURLToPath(new URL('../updates/engine.mjs',import.meta.url));
+ const child=spawn(process.execPath,['--input-type=module','-e',`import {acquireLock} from ${JSON.stringify(pathToFileURL(engine).href)};acquireLock(${JSON.stringify(home)});console.log('locked');setInterval(()=>{},1000);`],{stdio:['ignore','pipe','pipe']});
+ t.after(()=>child.kill());await new Promise((resolve,reject)=>{child.stdout.once('data',resolve);child.once('error',reject);});assert.throws(()=>E.acquireLock(home),/already running/);child.kill('SIGKILL');await new Promise(resolve=>child.once('exit',resolve));const release=E.acquireLock(home);release();release();
+});
+test('bounded transport refuses redirects, oversized replies, and insecure endpoints',async()=>{await assert.rejects(E.download('http://x',{maxBytes:1}),/HTTPS/);await assert.rejects(E.download('https://x',{maxBytes:1,fetcher:async()=>new Response('too much')}),/limit/);});
+test('unexpected files in installed releases are rejected before execution',t=>{const {home}=fixture(t),r=seed(home);fs.writeFileSync(path.join(E.releaseDir(home,revision(1)),'rogue.mjs'),'x');assert.throws(()=>E.verifyDirectory(E.releaseDir(home,revision(1)),r.manifest),/Unexpected/);});

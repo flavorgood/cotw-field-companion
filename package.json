@@ -2,7 +2,7 @@
   "name": "cotw-field-companion",
   "version": "0.4.1",
   "private": true,
-  "description": "Local, read-only COTW field journal and save observer. Private validation build.",
+  "description": "GrindZone — an unofficial theHunter: Call of the Wild companion with public reference tools and a private local save observer.",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"

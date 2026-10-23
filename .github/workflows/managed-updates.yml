@@ -1,0 +1,45 @@
+name: Managed Windows updates
+on:
+  push:
+    branches: [feat/managed-updates-20260923, fix/windows-installer-startup-20260923]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-update-cycle:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+      - name: Prepare pinned public reference
+        run: node tools/build-herd-reference.mjs
+      - name: Install existing relay dependencies without lifecycle scripts
+        run: npm ci --prefix cloud --ignore-scripts --no-audit --no-fund
+      - name: Exercise Windows setup, CLI dispatch, repair, and update cycle
+        shell: pwsh
+        run: |
+          node --test --test-reporter=tap tests/windows-entry.test.mjs tests/install-repair.test.mjs tests/install-recovery.test.mjs tests/update-engine.test.mjs tests/update-lifecycle.test.mjs tests/update-full-app.test.mjs *> managed-update-windows.tap
+          $result = $LASTEXITCODE
+          Get-Content managed-update-windows.tap
+          exit $result
+      - name: Archive public source and execution evidence
+        if: always()
+        shell: pwsh
+        run: |
+          git rev-parse HEAD | Set-Content managed-update-source.txt
+          $paths = @('package.json','launcher.mjs','server.mjs','INSTALL.cmd','START.cmd','lib','public','updates','tools','tests','cloud','licenses','managed-update-source.txt','managed-update-windows.tap') | Where-Object {Test-Path $_}
+          Compress-Archive -Path $paths -DestinationPath managed-update-source.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: managed-update-windows
+          retention-days: 7
+          path: |
+            managed-update-windows.tap
+            managed-update-source.txt
+            managed-update-source.zip

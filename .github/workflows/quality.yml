@@ -15,6 +15,7 @@ jobs:
         with:
           node-version: 24
       - run: npm ci --prefix cloud --ignore-scripts
+      - run: node tools/build-herd-reference.mjs
       - run: npm test
       - run: npm run build:web
       - run: git diff --exit-code -- docs

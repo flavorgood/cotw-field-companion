@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {herdCards,herdWorkspaceView} from '../public/herd-view.js';
+const row={id:'herd:1',label:'H-000001',species:'Gemsbok',speciesKey:'gemsbok',counts:{animals:3,males:1,females:2,diamonds:1,greatOnes:0,greatOneCandidates:0,unknownGreatOne:0,unclassified:0,femaleDiamondCapable:true},continuity:'shared_members',zones:[{id:'zone1',need:'drinking',status:'discovered',x:8000,z:9000,start:8,end:12,name:'Lake'}],zoneChanges:[]};
+test('herd cards display stable ID, female eligibility marker and separate trophy counts',()=>{const html=herdCards([row]);for(const value of ['H-000001','♀','Diamond potential','saved Great Ones','Feeding','Drinking','Resting','08:00–12:00'])assert(html.includes(value),value);});
+test('unmapped activities are explicit, never invented drink/feed/rest visits',()=>{const html=herdCards([{...row,zones:[{id:'x',need:null,status:'unmapped'}]}]);assert.equal((html.match(/No mapped assignment/g)||[]).length,3);assert.match(html,/no verified activity or location/);});
+test('workspaces include both lifetime Diamonds and Great Ones',()=>{const html=herdWorkspaceView({app:{name:'GrindZone'},career:{summary:{diamonds:7,greatOnes:2}},settings:{}});assert.match(html,/Career Diamonds <strong>7/);assert.match(html,/Career Great Ones <strong>2/);});
+test('static public reference mode cannot start a private herd reader',()=>{globalThis.document={documentElement:{dataset:{runtime:'public'}}};try{assert.equal(herdWorkspaceView({app:{name:'GrindZone'}}),'');}finally{delete globalThis.document;}});
+test('malicious herd and zone labels are escaped',()=>{const html=herdCards([{...row,label:'<script>x</script>',species:'<img>',zones:[{...row.zones[0],name:'<img src=x>'}]}]);assert.doesNotMatch(html,/<script>|<img/);assert.match(html,/&lt;script&gt;/);});
+test('missing lifetime counters stay unavailable instead of zero',()=>{assert.match(herdWorkspaceView({app:{name:'GrindZone'}}),/Not available/);});

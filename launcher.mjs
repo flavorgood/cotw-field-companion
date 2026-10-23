@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
+import {runtimeIdentity,runtimeScope,assertRunningRuntime,probeRunningRuntime} from './lib/runtime-identity.mjs';
 const [major,minor]=process.versions.node.split('.').map(Number);
 if(major<22||(major===22&&minor<13))throw Error('Node.js 22.13 or newer is required.');
 const app=path.dirname(fileURLToPath(import.meta.url)),home=os.homedir();
@@ -23,12 +24,11 @@ function openBrowser(){
   const browser=spawn('cmd.exe',['/d','/s','/c','start','',localUrl],{stdio:'ignore',windowsHide:true});
   browser.on('error',()=>{});
 }
-let existing=null;
-try{const response=await fetch(localUrl+'/api/state?reserve=19',{signal:AbortSignal.timeout(1200)});if(response.ok)existing=await response.json();}catch{}
+const selectedRuntime=runtimeIdentity(app);
+const existing=await probeRunningRuntime(localUrl);
 if(existing){
-  if(existing.app?.name!=='COTW Field Companion')throw Error('The selected local port is already in use by another application.');
-  const sameSave=(existing.observer?.sourceFolder||'').replaceAll('\\','/').toLowerCase()===(save||'').replaceAll('\\','/').toLowerCase();  if(!sameSave||process.env.COMPANION_DATA_DIR)throw Error('Another companion instance is running. Close it or choose a different COMPANION_PORT.');
-  console.log(`COTW Field Companion is already running at ${localUrl}`);
+  assertRunningRuntime(existing.runtime,selectedRuntime,runtimeScope(data,save));
+  console.log(`GrindZone build ${selectedRuntime.fingerprint.slice(0,12)} is already running at ${localUrl}`);
   if(process.argv.includes('--open'))openBrowser();
   process.exitCode=0;
 }else{
@@ -41,7 +41,7 @@ mkdirSync(data,{recursive:true});
 const args=['--permission',`--allow-fs-read=${app}`,`--allow-fs-read=${realpathSync(data)}`,`--allow-fs-write=${realpathSync(data)}`];
 if(save)args.push(`--allow-fs-read=${save}`);
 args.push(path.join(app,'server.mjs'));
-const child=spawn(process.execPath,args,{stdio:process.argv.includes('--open')?['inherit','pipe','inherit']:'inherit',env:{...process.env,NODE_OPTIONS:'',COMPANION_DATA_DIR:realpathSync(data),COTW_SAVE_DIR:save||''}});
+const child=spawn(process.execPath,args,{stdio:process.argv.includes('--open')?['inherit','pipe','inherit']:'inherit',env:{...process.env,NODE_OPTIONS:'',GRINDZONE_EXPECTED_FINGERPRINT:selectedRuntime.fingerprint,COMPANION_DATA_DIR:realpathSync(data),COTW_SAVE_DIR:save||''}});
 child.on('exit',code=>{process.exitCode=code??0;});child.on('error',e=>{console.error(e.message);process.exitCode=1;});
 process.on('SIGINT',()=>{child.kill('SIGINT');});process.on('SIGTERM',()=>{child.kill('SIGTERM');});
 

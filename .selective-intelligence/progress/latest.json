@@ -1,62 +1,55 @@
 {
   "schemaVersion": "si.progress-checkpoint.v1",
-  "checkpointId": "progress-20260918T2148Z-a6323c5",
-  "createdAt": "2026-09-18T21:46:00.8346656Z",
-  "outcome": "Implemented and locally proved the COTW Companion public feedback form plus a private owner inbox boundary, refreshed the installed Windows package from the pushed branch, and verified the real local browser view. No hosted public feedback origin or Pages deployment is claimed.",
+  "checkpointId": "progress-20260924T233153Z-5274b918",
+  "createdAt": "2026-09-24T23:31:53.304138+00:00",
+  "outcome": "Synthetic native Hunt and paired-phone browser verifier passed with clear default and species-selected screenshots",
   "scope": [
-    "public companion feedback intake",
-    "private owner notification inbox",
-    "local package refresh and browser proof",
-    "hosting inventory and product boundary"
+    "Hunt species gate, native scope, phone cache compatibility"
   ],
   "prohibitions": [
-    "No public feedback delivery claim before a COTW-owned host, durable storage, owner auth, and a synthetic live journey are accepted.",
-    "Do not deploy COTW data into the separate Skill Gaming World service or any unrelated product service."
+    "No owner install, journal changes or production release"
   ],
   "progress": {
     "completedVerified": [
-      "Public build contains a bounded feedback form with an explicit endpoint seam and honest GitHub Issues fallback.",
-      "Local Companion owner inbox proxies only authenticated owner reads and mark-as-read calls; its token stays server-side.",
-      "Phone relay tests prove paired players never receive the project owner inbox.",
-      "npm test: 167 passed, 0 failed, 1 host-only symlink skip.",
-      "npm test --prefix cloud: 28 passed, 0 failed.",
-      "npm run build:web: 23 public files, privateDataIncluded false.",
-      "Portable staging produced 48 reviewed files and copied matching server.mjs and public/app.js hashes into the installed package.",
-      "Installed Windows Companion restarted from the reviewed package and the Feedback view was checked in the real browser."
+      "Default Map places layer off with session-persistent toggle; cache hook updated for stale request guard; verifier covers all-animal lightweight state, selected species, full Stats refetch, phone pairing and spoiler flow"
     ],
-    "changedUnverified": [
-      "The public Pages site has not accepted this branch; it still serves the prior main-line state.",
-      "The feedback origin is not deployed, so public submissions and owner notifications are not live-proven.",
-      "The Render workspace has 109 services but no COTW-owned service or COTW database. Its only gaming-named service is skill-gaming-world, a separate Next/Postgres product.",
-      "The GitHub Actions Quality check for this commit failed before any steps were reported; local gates pass, but CI acceptance remains open."
-    ],
+    "changedUnverified": [],
     "proof": [
-      "Local source identity: a6323c5273e7f93a67086ca7f184684de4b166af on fix/hunting-workflow-20260918.",
-      "Existing PR #2 updated to include the current scope and hosting boundary.",
-      "Render service and Postgres inventory was read-only; no provider mutation occurred.",
-      "Local installed browser screenshot and accessibility tree show the owner inbox honest-unavailable state without a loading loop."
+      "Paired-phone/PC browser verifier passed 8 checks in local mode; screenshots saved in C:\\Users\\flavo\\Documents\\Codex\\2026-09-24\\grindzone-hunt-species-evidence; pinned herd reference generated and npm ci --prefix cloud completed"
     ],
-    "externalEffects": [
-      "Pushed a6323c5 to origin/fix/hunting-workflow-20260918.",
-      "Updated existing GitHub PR #2 title and body.",
-      "Refreshed and restarted the local installed Companion only.",
-      "No Render service, database, Pages deployment, public endpoint, player data, or account data was changed."
-    ],
-    "nextSafeAction": "Select a COTW-owned host, durable storage, owner authentication, and provider-verified client identity. Then configure the feedback origin, run a synthetic public-submit to private-inbox journey, and separately accept the main-line Pages deployment after CI is understood."
+    "externalEffects": [],
+    "doNotRepeat": [],
+    "nextSafeAction": "Run full source test gate after pinned herd-reference generation and cloud dependency setup; inspect exact failures, then push draft PR"
   },
   "repository": {
     "root": ".",
     "rootKind": "repository_relative",
-    "branch": "fix/hunting-workflow-20260918",
-    "headBefore": "d00e962262cc9558013277b301e29c7f6827d391",
-    "checkpointCommit": "d00e962262cc9558013277b301e29c7f6827d391",
-    "pushRequested": true,
-    "pushRemote": "origin",
+    "branch": "fix/grindzone-hunt-species-gate-20260924",
+    "headBefore": "26e0270124f343734ba4f50178abab7a7472174b",
+    "checkpointCommit": "containing_commit",
+    "pushRequested": false,
+    "pushRemote": null,
     "protectedBranchAuthorized": false,
-    "selectedStatusBefore": [],
+    "selectedStatusBefore": [
+      " M cloud/phone-cache-client.mjs",
+      " M public/app.js",
+      " M tools/verify-hidden-zones.mjs"
+    ],
     "unrelatedChangeCountExcluded": 0
   },
-  "savedFiles": [],
-  "privacyBoundary": "bounded summaries and selected file identities only; absolute paths, unrelated file names, raw prompts, player data, screenshots, and secrets are excluded"
+  "savedFiles": [
+    {
+      "path": "public/app.js",
+      "sha256": "6a50406ea458249d9da9a785cda1c6120708392f557068b41398be9d24043190"
+    },
+    {
+      "path": "cloud/phone-cache-client.mjs",
+      "sha256": "a293955245454bc911ad6cee417991055e9c75ca1636ce16e9e0f523256bd114"
+    },
+    {
+      "path": "tools/verify-hidden-zones.mjs",
+      "sha256": "5d03b197f2df27f48783127b7a5001a7ac6cf3b1bc341bddb5ecf8f24c84acf9"
+    }
+  ],
+  "privacyBoundary": "bounded summaries and selected file identities only; absolute paths, unrelated file names, raw prompts, and secrets are excluded"
 }
-

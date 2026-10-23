@@ -1,9 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {validBounds,homeBox,tileUrl,tilePlan,insideBounds,scaleBar} from '../public/map-geometry.js';
+import {validBounds,homeBox,tileUrl,tilePlan,insideBounds,scaleBar,zoneMarkerPlan} from '../public/map-geometry.js';
 const catalog=JSON.parse(readFileSync(new URL('../lib/maps-data.json',import.meta.url)));
 const byId=id=>catalog.reserves.find(r=>r.id===id);
+test('full-reserve reference density is bounded without hiding selected, route or discovered zones',()=>{
+ const references=Array.from({length:2971},(_,i)=>({id:`reference-${i}`,x:50+i%55*70,z:50+Math.floor(i/55)*70,source:'population_path_reference'}));
+ const discovered={id:'discovered',x:150,z:150,source:'save'},offscreen={id:'offscreen',x:10000,z:10000,source:'population_path_reference'};
+ const all=[...references,discovered,offscreen],routeIds=new Set(['reference-0']);
+ const broad=zoneMarkerPlan(all,[0,0,4000,4000],8,{cluster:true,selectedId:'reference-2970',routeIds});
+ assert.equal(broad.visibleCount,2971,'all visible non-route source zones remain accounted for');
+ assert.equal(broad.clusters.reduce((count,cluster)=>count+cluster.count,0)+broad.zones.length,2971);
+ assert.ok(broad.clusters.length+broad.zones.length<350,'2,971 saved references produce a bounded SVG marker plan');
+ assert.ok(broad.zones.some(zone=>zone.id==='reference-2970'),'the selected reference remains individually selectable');
+ assert.ok(broad.zones.some(zone=>zone.id==='discovered'),'a discovered zone remains individually selectable');
+ assert.ok(!broad.zones.some(zone=>zone.id==='reference-0'),'route stops render in their own numbered layer');
+ assert.ok(!broad.zones.some(zone=>zone.id==='offscreen'),'offscreen references are culled');
+ const detailed=zoneMarkerPlan(all,[0,0,500,500],1,{cluster:false,routeIds});
+ assert.equal(detailed.clusters.length,0,'zooming in reveals the individual references');
+ assert.ok(detailed.zones.some(zone=>zone.id==='reference-1'));
+ assert.ok(!detailed.zones.some(zone=>zone.id==='offscreen'));
+});
 test('all 19 reference reserves have real-map geometry',()=>{assert.equal(catalog.reserves.length,19);assert.equal(new Set(catalog.reserves.map(r=>r.id)).size,19);for(const r of catalog.reserves){assert.ok(validBounds(r.bounds));assert.ok(validBounds(r.mapBounds));assert.equal(r.maxZoom,5);assert.ok(r.attribution);assert.match(r.sourcePage,/^https:\/\/mathartbang\.com\/deca\/hp\/map\.html/);}});
 test('Askiy source geometry preserves positive X/Z',()=>{const r=byId(19),tiles=tilePlan(r,[12288,8192,2048,2048],256);assert.ok(tiles.length);assert.equal(tiles[0].x,12288);assert.equal(tiles[0].z,8192);assert.match(tiles[0].url,/r19\/t_topo\/3\/6\/4\.png$/);});
 test('Hirschfelden keeps negative X rather than an invented zero origin',()=>{const r=byId(0),t=tilePlan(r,[-16384,0,2048,2048],256)[0];assert.equal(t.x,-16384);assert.equal(t.z,0);assert.equal(t.col,0);});

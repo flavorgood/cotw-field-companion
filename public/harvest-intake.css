@@ -1,0 +1,13 @@
+.harvest-intake{box-sizing:border-box;width:min(700px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:20px;border:1px solid #425043;border-radius:16px;background:#111b16;color:#edf3ed;overflow:auto;font:inherit}
+.harvest-intake::backdrop{background:rgba(0,0,0,.75)}
+.harvest-intake *{box-sizing:border-box;min-width:0}
+.harvest-intake header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.harvest-intake h2{margin:0;font-size:1.3rem}.harvest-intake p{line-height:1.5;overflow-wrap:anywhere}
+.harvest-intake label{display:grid;gap:7px;margin:12px 0}.harvest-intake input,.harvest-intake select,.harvest-intake textarea{width:100%;padding:11px;background:#0b130e;border:1px solid #4c6350;border-radius:8px;color:inherit;font:inherit}
+.harvest-intake button{min-height:44px;padding:10px 14px;border-radius:8px;border:1px solid #607969;background:#223b2b;color:inherit;font:inherit;cursor:pointer;white-space:normal}.harvest-intake button:disabled{opacity:.55;cursor:default}
+.harvest-intake button:focus-visible,.harvest-intake input:focus-visible,.harvest-intake select:focus-visible,.harvest-intake textarea:focus-visible{outline:3px solid #c6e1a6;outline-offset:2px}
+.harvest-intake [data-preview]{width:100%;max-height:300px;object-fit:contain;background:#080e0a;border-radius:8px}.harvest-intake [hidden]{display:none!important}
+.harvest-intake .intake-help{color:#b8c7bb;font-size:.85rem}.harvest-intake [data-status]{padding:10px;background:#243427;border-radius:8px;min-height:44px}
+.harvest-intake fieldset{border:0;padding:0;margin:10px 0}.harvest-intake fieldset:disabled{opacity:.55}.harvest-intake .intake-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.harvest-intake .intake-check{display:flex;align-items:flex-start;gap:10px}.harvest-intake .intake-check input{width:22px;height:22px;flex:none}.harvest-intake footer{margin-top:16px}.harvest-intake [data-save]{width:100%;font-weight:700;background:#315e39}
+@media(max-width:360px){.harvest-intake{padding:14px}.harvest-intake .intake-grid{grid-template-columns:1fr}}

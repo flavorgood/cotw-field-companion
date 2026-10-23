@@ -1,6 +1,6 @@
-# COTW Companion
+# GrindZone
 
-An independent companion for **theHunter: Call of the Wild**. Free public reference tools, a local read-only career/harvest observer, and a private-in-browser share studio.
+**GrindZone** is an independent companion for **theHunter: Call of the Wild**. Free public reference tools, a local read-only career/harvest observer, and a private-in-browser share studio.
 
 ## Try the public field library
 
@@ -56,7 +56,7 @@ Weapon/ammunition facts and statistic identifier mappings were independently nor
 
 For local UI work against an already running Companion, `node tools/browser-client.mjs` serves the current UI at `http://127.0.0.1:47844` and uses the existing API on port 47831. This optional browser client forwards route and journal actions to that process; it does not install an update, start a second journal writer, or enable phone access. It keeps command identities intact and never automatically retries a write. It may read the selected reserve's save to display saved pressure when the older API lacks that projection. Run it with Node filesystem permissions restricted to reading this source folder and the selected save folder; it needs no filesystem write permission.
 
-Install relay test dependencies with `npm ci --prefix cloud --ignore-scripts`, then run `npm test` for the complete isolated synthetic suite. The local desktop runtime has no npm runtime dependencies. `npm run build:web` projects an explicit allowlist into `docs/` for GitHub Pages. It never reads the installed user's app, game saves, screenshots or database. The public website uses the same reference and share modules as the local app; its entrypoint never calls local save APIs.
+Install relay test dependencies with `npm ci --prefix cloud --ignore-scripts`, generate the pinned public herd facts with `node tools/build-herd-reference.mjs`, then run `npm test` for the complete isolated synthetic suite. The generator checks the source blob before writing its local output; portable and Windows download CLI staging also runs it. The local desktop runtime has no npm runtime dependencies. `npm run build:web` projects an explicit allowlist into `docs/` for GitHub Pages. It never reads the installed user's app, game saves, screenshots or database. The public website uses the same reference and share modules as the local app; its entrypoint never calls local save APIs.
 
 Report bugs in [Issues](https://github.com/infotradescout/cotw-field-companion/issues). Do not attach full saves, account identifiers, or personal photos. The separately gated feedback-service boundary is documented in [`FEEDBACK-SERVICE.md`](FEEDBACK-SERVICE.md); until its hosted origin and owner inbox are accepted, Issues is the honest public path. See `ROADMAP.md` for the retained product scope and `PUBLISHER_BRIEF.md` for evaluation goals.
 

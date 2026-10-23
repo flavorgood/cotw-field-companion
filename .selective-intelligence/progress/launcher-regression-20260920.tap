@@ -1,0 +1,64 @@
+TAP version 13
+# Subtest: the legacy installed name remains recognizable
+ok 1 - the legacy installed name remains recognizable
+  ---
+  duration_ms: 308.351347
+  type: 'test'
+  ...
+# Subtest: the approved GrindZone name reopens without an unrelated-app error
+ok 2 - the approved GrindZone name reopens without an unrelated-app error
+  ---
+  duration_ms: 268.62129
+  type: 'test'
+  ...
+# Subtest: an unrelated application is still rejected
+ok 3 - an unrelated application is still rejected
+  ---
+  duration_ms: 254.260535
+  type: 'test'
+  ...
+# Subtest: a similar name is not treated as the approved application
+ok 4 - a similar name is not treated as the approved application
+  ---
+  duration_ms: 261.869517
+  type: 'test'
+  ...
+# Subtest: a recognized GrindZone on another save is not reused
+ok 5 - a recognized GrindZone on another save is not reused
+  ---
+  duration_ms: 242.164134
+  type: 'test'
+  ...
+# Subtest: a legacy companion on another save is still rejected
+ok 6 - a legacy companion on another save is still rejected
+  ---
+  duration_ms: 241.474295
+  type: 'test'
+  ...
+# Subtest: an explicit alternate journal retains the existing conflict guard
+ok 7 - an explicit alternate journal retains the existing conflict guard
+  ---
+  duration_ms: 249.199439
+  type: 'test'
+  ...
+# Subtest: repeated launches of GrindZone reuse the app without writes
+ok 8 - repeated launches of GrindZone reuse the app without writes
+  ---
+  duration_ms: 512.06781
+  type: 'test'
+  ...
+# Subtest: missing application identity is still rejected
+ok 9 - missing application identity is still rejected
+  ---
+  duration_ms: 250.017823
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2860.654608

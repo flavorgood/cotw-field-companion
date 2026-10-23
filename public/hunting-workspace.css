@@ -808,7 +808,7 @@ body.hunting-app {
 .hunting-app .native-map-expanded .map-route-summary{bottom:106px;left:20px;right:auto;max-width:calc(100% - 40px)}
 @media(max-width:380px){.hunting-app .route-page .intro{display:grid;gap:12px}.hunting-app .route-header-actions .button{flex:1}.hunting-app .map-route-summary{padding:7px 8px}.hunting-app .map-route-summary span{font-size:10px}}
 
-@media(min-width:901px){
+@media (min-width:901px) and (height > 500px), (width > 1000px){
  .hunting-app[data-view=map] .main-shell{height:100dvh;display:flex;flex-direction:column;min-height:0}
  .hunting-app[data-view=map] .topbar{flex:0 0 auto}
  .hunting-app[data-view=map] .page-foot,.hunting-app[data-view=map] .hunt-heading,.hunting-app[data-view=map] .hunt-summary{display:none}

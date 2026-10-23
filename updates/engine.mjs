@@ -180,8 +180,13 @@ export function restoreJournal(home,dataDir,name){
  // Preserve failed-candidate journal bytes separately; recovery never erases unrelated user files.
  const quarantine=path.join(dir,'failed-'+randomUUID());fs.mkdirSync(quarantine);
  for(const n of JOURNAL_FILES){const full=plainPath(path.join(dataDir,n));if(fs.existsSync(full))fs.copyFileSync(full,path.join(quarantine,n),fs.constants.COPYFILE_EXCL);}
- for(const n of JOURNAL_FILES){const full=plainPath(path.join(dataDir,n));if(seen.has(n)){const tmp=full+'.recover-'+randomUUID();fs.copyFileSync(path.join(dir,n),tmp,fs.constants.COPYFILE_EXCL);const fd=fs.openSync(tmp,'r+');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(tmp,full);}else fs.rmSync(full,{force:true});}
- syncDir(dataDir);
+ // Prepare and verify every restore member before replacing any current journal bytes.
+ const staged=new Map();
+ try{
+  for(const f of b.files){const tmp=plainPath(path.join(dataDir,f.name)+'.recover-'+randomUUID());staged.set(f.name,tmp);try{fs.copyFileSync(plainPath(path.join(dir,f.name)),tmp,fs.constants.COPYFILE_EXCL);}catch(error){if(error.code==='EEXIST')staged.delete(f.name);throw error;}const fd=fs.openSync(tmp,'r+');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}if(fs.statSync(tmp).size!==f.bytes||fileDigest(tmp)!==f.sha256)fail('Recovery staging integrity failed');}
+  for(const n of JOURNAL_FILES){const full=plainPath(path.join(dataDir,n));if(seen.has(n))fs.renameSync(staged.get(n),full);else fs.rmSync(full,{force:true});}
+  syncDir(dataDir);
+ }finally{for(const tmp of staged.values())fs.rmSync(tmp,{force:true});}
 }
 export function beginActivation(home,dataDir,trust){
  const s=loadState(home);if(!s.staged||s.pending)return null;
